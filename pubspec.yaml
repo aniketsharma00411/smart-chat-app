@@ -1,0 +1,29 @@
+name: smart_chat_app
+description: A real-time communication copilot for multilingual teams.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.2
+  firebase_core: ^4.4.0
+  firebase_auth: ^6.1.4
+  cloud_firestore: ^6.1.2
+  google_sign_in: ^6.2.1
+  http: ^1.1.2
+  flutter_riverpod: ^3.2.0
+  go_router: ^17.0.1
+  intl: ^0.20.2
+  google_fonts: ^8.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
