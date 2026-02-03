@@ -126,3 +126,52 @@ macos/Runner/GoogleService-Info.plist
 
 # API Configuration
 lib/core/config/api_config.dart
+# Secrets
+.env
+
+# Terraform
+**/.terraform/
+**/.terraform.lock.hcl
+**/terraform.tfstate
+**/terraform.tfstate.*
+**/terraform.tfvars
+**/terraform.*.tfvars
+**/.terraform.tfstate.lock.info
+**/crash.log
+**/crash.*.log
+**/terraform.tfplan
+**/override.tf
+**/override.tf.json
+**/*_override.tf
+**/*_override.tf.json
+**/.terraformrc
+**/terraform.rc
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+# lib/  # This is a common directory for Next.js so cannot ignore it
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Python virtual environment
+venv/
+env/
+ENV/
+.env
+.venv
