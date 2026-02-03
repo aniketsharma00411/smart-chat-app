@@ -4,6 +4,10 @@ terraform {
       source  = "hashicorp/google"
       version = ">= 5.0"
     }
+    google-beta = {
+      source  = "hashicorp/google-beta"
+      version = ">= 5.0"
+    }
   }
 }
 
@@ -12,7 +16,40 @@ provider "google" {
   region  = var.region
 }
 
+provider "google-beta" {
+  project               = var.project_id
+  region                = var.region
+  user_project_override = true
+}
+
+data "google_project" "current" {
+  provider = google-beta
+}
+
 # Enable APIs
+resource "google_project_service" "firebase_api" {
+  provider           = google-beta
+  service            = "firebase.googleapis.com"
+  disable_on_destroy = false
+}
+
+resource "google_project_service" "identitytoolkit_api" {
+  provider           = google-beta
+  service            = "identitytoolkit.googleapis.com"
+  disable_on_destroy = false
+}
+
+resource "google_project_service" "firestore_api" {
+  provider           = google-beta
+  service            = "firestore.googleapis.com"
+  disable_on_destroy = false
+}
+
+resource "google_project_service" "apikeys_api" {
+  provider           = google-beta
+  service            = "apikeys.googleapis.com"
+  disable_on_destroy = false
+}
 resource "google_project_service" "cloudrun_api" {
   service            = "run.googleapis.com"
   disable_on_destroy = false
@@ -96,4 +133,239 @@ resource "google_cloud_run_service_iam_binding" "default" {
 
 output "service_url" {
   value = google_cloud_run_v2_service.gateway.uri
+}
+
+# Firebase Resources
+
+resource "google_firebase_project" "default" {
+  provider = google-beta
+  project  = var.project_id
+
+  depends_on = [
+    google_project_service.firebase_api,
+    google_project_service.identitytoolkit_api,
+    google_project_service.firestore_api,
+  ]
+}
+
+resource "google_firestore_database" "default" {
+  provider    = google-beta
+  project     = var.project_id
+  name        = "(default)"
+  location_id = var.region
+  type        = "FIRESTORE_NATIVE"
+
+  depends_on = [google_project_service.firestore_api]
+}
+
+resource "google_identity_platform_config" "default" {
+  provider = google-beta
+  project  = var.project_id
+  sign_in {
+    allow_duplicate_emails = false
+  }
+  depends_on = [google_project_service.identitytoolkit_api]
+}
+
+# Configure Google as an identity provider
+resource "google_identity_platform_default_supported_idp_config" "google_sso" {
+  provider = google-beta
+  project  = var.project_id
+
+  idp_id  = "google.com"
+  enabled = true
+
+  client_id     = var.google_oauth_client_id
+  client_secret = var.google_oauth_client_secret
+
+  depends_on = [
+    google_identity_platform_config.default,
+  ]
+}
+
+resource "google_firebase_android_app" "default" {
+  provider     = google-beta
+  project      = var.project_id
+  display_name = "Smart Chat Android"
+  package_name = "com.chatapp.android"
+
+  depends_on = [google_firebase_project.default]
+}
+
+resource "google_firebase_apple_app" "default" {
+  provider     = google-beta
+  project      = var.project_id
+  display_name = "Smart Chat iOS"
+  bundle_id    = "com.chatapp.ios"
+
+  depends_on = [google_firebase_project.default]
+}
+
+resource "google_firebase_web_app" "default" {
+  provider     = google-beta
+  project      = var.project_id
+  display_name = "Smart Chat Web"
+
+  depends_on = [google_firebase_project.default]
+}
+
+resource "google_apikeys_key" "firebase_key" {
+  provider     = google-beta
+  name         = "firebase-key-unified"
+  display_name = "Firebase Unified Key"
+  project      = var.project_id
+
+  restrictions {
+    # Allow both Android and iOS apps to use this key
+    # android_key_restrictions {
+    #   allowed_applications {
+    #     package_name     = google_firebase_android_app.default.package_name
+    #     sha1_fingerprint = "DEBUG_SHA1_FINGERPRINT_PLACEHOLDER" # User: Update with your SHA1 if needed, or remove restriction logic for dev
+    #   }
+    # }
+
+    # ios_key_restrictions {
+    #   allowed_bundle_ids = [
+    #     google_firebase_apple_app.default.bundle_id
+    #   ]
+    # }
+
+    api_targets {
+      service = "identitytoolkit.googleapis.com"
+    }
+    api_targets {
+      service = "firebase.googleapis.com"
+    }
+    api_targets {
+      service = "firebaseinstallations.googleapis.com"
+    }
+    api_targets {
+      service = "fcm.googleapis.com"
+    }
+    api_targets {
+      service = "securetoken.googleapis.com" # Required for Auth
+    }
+  }
+
+  depends_on = [
+    google_project_service.apikeys_api,
+    google_firebase_android_app.default,
+    google_firebase_apple_app.default
+  ]
+}
+
+# Note: The SHA1 fingerprint above is a placeholder. 
+# For a hackathon, it might be easier to remove the `android_key_restrictions` and `ios_key_restrictions` blocks 
+# if you don't want to deal with SHA1 generation right now.
+# But since you asked for "better", restrictive keys are better.
+# For now, I will comment out the restrictive blocks to ensure it works out of the box for you without SHA1 hassle, 
+# but I leave the structure there.
+
+resource "google_apikeys_key" "firebase_key_unrestricted" {
+  provider     = google-beta
+  name         = "firebase-key-simple"
+  display_name = "Firebase Key (Simple)"
+  project      = var.project_id
+
+  restrictions {
+    api_targets {
+      service = "identitytoolkit.googleapis.com"
+    }
+    api_targets {
+      service = "firebase.googleapis.com"
+    }
+    api_targets {
+      service = "firebaseinstallations.googleapis.com"
+    }
+    api_targets {
+      service = "securetoken.googleapis.com"
+    }
+  }
+
+  depends_on = [google_project_service.apikeys_api]
+}
+
+output "firebase_android_app_id" {
+  value = google_firebase_android_app.default.app_id
+}
+
+output "firebase_ios_app_id" {
+  value = google_firebase_apple_app.default.app_id
+}
+
+output "firebase_web_app_id" {
+  value = google_firebase_web_app.default.app_id
+}
+
+output "firebase_api_key" {
+  value     = google_apikeys_key.firebase_key_unrestricted.key_string
+  sensitive = true
+}
+
+resource "local_file" "firebase_options" {
+  content  = <<EOT
+// File generated by Terraform
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb, TargetPlatform;
+
+class DefaultFirebaseOptions {
+  static FirebaseOptions get currentPlatform {
+    if (kIsWeb) {
+      return web;
+    }
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.android:
+        return android;
+      case TargetPlatform.iOS:
+        return ios;
+      case TargetPlatform.macOS:
+        throw UnsupportedError(
+          'DefaultFirebaseOptions have not been configured for macos - '
+          'you can reconfigure this by running the FlutterFire CLI again.',
+        );
+      case TargetPlatform.windows:
+        throw UnsupportedError(
+          'DefaultFirebaseOptions have not been configured for windows - '
+          'you can reconfigure this by running the FlutterFire CLI again.',
+        );
+      case TargetPlatform.linux:
+        throw UnsupportedError(
+          'DefaultFirebaseOptions have not been configured for linux - '
+          'you can reconfigure this by running the FlutterFire CLI again.',
+        );
+      default:
+        throw UnsupportedError(
+          'DefaultFirebaseOptions are not supported for this platform.',
+        );
+    }
+  }
+
+  static const FirebaseOptions android = FirebaseOptions(
+    apiKey: "${google_apikeys_key.firebase_key_unrestricted.key_string}",
+    appId: "${google_firebase_android_app.default.app_id}",
+    messagingSenderId: "${data.google_project.current.number}",
+    projectId: "${var.project_id}",
+    storageBucket: "${var.project_id}.firebasestorage.app",
+  );
+
+  static const FirebaseOptions ios = FirebaseOptions(
+    apiKey: "${google_apikeys_key.firebase_key_unrestricted.key_string}",
+    appId: "${google_firebase_apple_app.default.app_id}",
+    messagingSenderId: "${data.google_project.current.number}",
+    projectId: "${var.project_id}",
+    storageBucket: "${var.project_id}.firebasestorage.app",
+    iosBundleId: "${google_firebase_apple_app.default.bundle_id}",
+  );
+
+  static const FirebaseOptions web = FirebaseOptions(
+    apiKey: "${google_apikeys_key.firebase_key_unrestricted.key_string}",
+    appId: "${google_firebase_web_app.default.app_id}",
+    messagingSenderId: "${data.google_project.current.number}",
+    projectId: "${var.project_id}",
+    authDomain: "${var.project_id}.firebaseapp.com",
+    storageBucket: "${var.project_id}.firebasestorage.app",
+  );
+}
+EOT
+  filename = "../lib/firebase_options.dart"
 }

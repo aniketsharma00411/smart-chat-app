@@ -175,3 +175,6 @@ env/
 ENV/
 .env
 .venv
+
+# Miscellaneous
+.DS_Store

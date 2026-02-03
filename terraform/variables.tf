@@ -32,3 +32,14 @@ variable "gemini_model_name" {
   type        = string
   default     = "gemini-3-flash-preview"
 }
+
+variable "google_oauth_client_id" {
+  description = "Google OAuth Client ID for Sign-In"
+  type        = string
+}
+
+variable "google_oauth_client_secret" {
+  description = "Google OAuth Client Secret for Sign-In"
+  type        = string
+  sensitive   = true
+}
