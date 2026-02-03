@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:smart_chat_app/core/providers/providers.dart';
@@ -17,7 +18,49 @@ class ChatDetailScreen extends ConsumerStatefulWidget {
 class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  String _targetLanguage = 'es'; // Default to Spanish for demo
+  bool _isTranslating = false;
+  String? _lastError;
+
+  void _batchTranslateIfNeeded(List<Message> messages, String? preferredLanguage) async {
+      if (preferredLanguage == null || _isTranslating) return;
+      
+      // Filter messages that need translation
+      final candidates = messages.where((msg) {
+          final hasTranslation = msg.translations?.containsKey(preferredLanguage) ?? false;
+          final isTextEmpty = msg.text.isEmpty;
+          return !hasTranslation && !isTextEmpty;
+      }).toList();
+
+      if (candidates.isEmpty) return;
+
+      if (mounted) setState(() => _isTranslating = true);
+
+      try {
+          final batch = candidates.take(20).toList();
+          
+          List<Map<String, String>> itemsToTranslate = batch.map((m) => {
+              'id': m.id,
+              'text': m.text
+          }).toList();
+          
+          final apiService = ref.read(apiServiceProvider);
+          final results = await apiService.translateBatch(itemsToTranslate, preferredLanguage);
+          
+          if (results != null && results.isNotEmpty) {
+              final firestoreService = ref.read(firestoreServiceProvider);
+              await firestoreService.saveBatchTranslations(widget.chatId, results, preferredLanguage);
+              if (mounted) setState(() => _lastError = null);
+          } else {
+              if (mounted) setState(() => _lastError = "Translation API returned no results. Check if the backend is ready.");
+          }
+
+      } catch (e) {
+          debugPrint("Translation error: $e");
+          if (mounted) setState(() => _lastError = "Translation failed: $e. Check API endpoint.");
+      } finally {
+          if (mounted) setState(() => _isTranslating = false);
+      }
+  }
 
   void _sendMessage() async {
     final text = _controller.text.trim();
@@ -28,33 +71,21 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
     final user = ref.read(currentUserProvider).value;
     if (user == null) return;
 
-    final apiService = ref.read(apiServiceProvider);
     final firestoreService = ref.read(firestoreServiceProvider);
 
-    // 1. Analyze Tone (Basic approach: analyze current text + mock history for now)
-    // To do it properly, we'd fetch previous messages. 
-    // For MVP/Demo as per request 'Gateway API' usage:
-    final toneResult = await apiService.analyzeTone(text, ["History placeholder"]); 
-    
-    // 2. Translate
-    final translationResult = await apiService.translateMessage(text, _targetLanguage);
-
     final message = Message(
-      id: '', // Firestore generates this if using .add(), but we construct it here just for model
+      id: '', 
       text: text,
       senderId: user.uid,
       timestamp: DateTime.now(),
-      tone: toneResult,
-      translation: translationResult,
-      originalLanguage: 'en', // Assuming English input for now
+      originalLanguage: 'en',
     );
 
     await firestoreService.sendMessage(widget.chatId, message);
     
-    // Scroll to bottom
     if (_scrollController.hasClients) {
         _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
+          0.0,
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeOut,
         );
@@ -65,69 +96,125 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
   Widget build(BuildContext context) {
     final firestoreService = ref.watch(firestoreServiceProvider);
     final user = ref.watch(currentUserProvider).value;
+    final userProfile = ref.watch(userProfileProvider).value;
+    final preferredLanguage = userProfile?['preferredLanguage'];
     final messagesStream = firestoreService.getMessages(widget.chatId);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC), // Slate 50
-      appBar: AppBar(
-        flexibleSpace: Container(
+      backgroundColor: const Color(0xFFF8FAFC),
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(80),
+        child: Container(
           decoration: const BoxDecoration(
             gradient: LinearGradient(
-              colors: [Color(0xFF4338CA), Color(0xFF6366F1)], // Indigo gradients
+              colors: [Color(0xFF4338CA), Color(0xFF6366F1)],
               begin: Alignment.centerLeft,
               end: Alignment.centerRight,
             ),
           ),
-        ),
-        title: Row(
-          children: [
-            const CircleAvatar(backgroundImage: NetworkImage('https://i.pravatar.cc/150'), radius: 16),
-            const SizedBox(width: 10),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          child: SafeArea(
+            child: Row(
               children: [
-                Text("Chat ${widget.chatId}", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
-                const Text("Online", style: TextStyle(fontSize: 12, color: Colors.white70)),
+                IconButton(
+                  icon: const Icon(Icons.arrow_back, color: Colors.white),
+                  onPressed: () => context.pop(),
+                ),
+                Expanded(
+                  child: ref.watch(chatProvider(widget.chatId)).when(
+                    data: (chat) {
+                      if (chat == null) return const Text("Chat", style: TextStyle(color: Colors.white, fontSize: 18));
+                      final participants = List<String>.from(chat['participants'] ?? []);
+                      final otherUserId = participants.firstWhere((id) => id != user?.uid, orElse: () => '');
+                      
+                      return ref.watch(otherUserProvider(otherUserId)).when(
+                        data: (otherUser) {
+                          final displayName = otherUser?['displayName'] ?? 'User';
+                          final photoURL = otherUser?['photoURL'];
+                          return Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 18,
+                                backgroundImage: photoURL != null ? NetworkImage(photoURL) : const NetworkImage('https://i.pravatar.cc/150'),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  displayName,
+                                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                        loading: () => const Text("...", style: TextStyle(color: Colors.white)),
+                        error: (_, __) => const Text("User", style: TextStyle(color: Colors.white)),
+                      );
+                    },
+                    loading: () => const SizedBox.shrink(),
+                    error: (_, __) => const Text("Error", style: TextStyle(color: Colors.white)),
+                  ),
+                ),
+                // Call Actions
+                ref.watch(chatProvider(widget.chatId)).maybeWhen(
+                  data: (chat) {
+                    if (chat == null) return const SizedBox.shrink();
+                    final participants = List<String>.from(chat['participants'] ?? []);
+                    final otherUserId = participants.firstWhere((id) => id != user?.uid, orElse: () => '');
+                    if (otherUserId.isEmpty) return const SizedBox.shrink();
+
+                    return ref.watch(otherUserProvider(otherUserId)).maybeWhen(
+                      data: (otherUser) {
+                        final displayName = otherUser?['displayName'] ?? 'User';
+                        
+                        return IconButton(
+                          icon: const Icon(Icons.phone, color: Colors.greenAccent),
+                          onPressed: () async {
+                            final firestore = ref.read(firestoreServiceProvider);
+                            final currentUser = ref.read(currentUserProvider).value;
+                            if (currentUser == null) return;
+
+                            final callId = await firestore.createCall(currentUser.uid, otherUserId);
+                            if (context.mounted) {
+                              context.push('/call/$callId');
+                            }
+                          },
+                        );
+                      },
+                      orElse: () => const SizedBox.shrink(),
+                    );
+                  },
+                  orElse: () => const SizedBox.shrink(),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.settings, color: Colors.white),
+                  onPressed: () => context.push('/settings'),
+                ),
+                const SizedBox(width: 8),
               ],
             ),
-          ],
+          ),
         ),
-        iconTheme: const IconThemeData(color: Colors.white),
-        actions: [
-          IconButton(
-            onPressed: () => context.push('/call'),
-            icon: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle),
-              child: const Icon(Icons.call, color: Colors.white, size: 20),
-            ),
-          ),
-          Container(
-            margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(20)),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                value: _targetLanguage,
-                dropdownColor: const Color(0xFF1E293B),
-                icon: const Icon(Icons.translate, color: Colors.white, size: 18),
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-                items: const [
-                  DropdownMenuItem(value: 'es', child: Text("🇪🇸 Spanish")),
-                  DropdownMenuItem(value: 'fr', child: Text("🇫🇷 French")),
-                  DropdownMenuItem(value: 'de', child: Text("🇩🇪 German")),
-                  DropdownMenuItem(value: 'hi', child: Text("🇮🇳 Hindi")),
-                ],
-                onChanged: (val) {
-                  if (val != null) setState(() => _targetLanguage = val);
-                },
-              ),
-            ),
-          ),
-        ],
       ),
       body: Column(
         children: [
+          if (_lastError != null)
+            Container(
+              width: double.infinity,
+              color: Colors.red.shade100,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                children: [
+                  const Icon(Icons.error_outline, color: Colors.red, size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(_lastError!, style: const TextStyle(color: Colors.red, fontSize: 12))),
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 14, color: Colors.red),
+                    onPressed: () => setState(() => _lastError = null),
+                  ),
+                ],
+              ),
+            ),
           Expanded(
             child: StreamBuilder<List<Message>>(
               stream: messagesStream,
@@ -136,6 +223,12 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
                 if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
 
                 final messages = snapshot.data!;
+                
+                // Trigger batch translation check with the REACTIVE preferredLanguage
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                   _batchTranslateIfNeeded(messages, preferredLanguage);
+                });
+
                 if (messages.isEmpty) return Center(child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: const [
@@ -147,6 +240,7 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
 
                 return ListView.builder(
                   controller: _scrollController,
+                  reverse: true,
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
                   itemCount: messages.length,
                   itemBuilder: (context, index) {
@@ -154,23 +248,25 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
                     final currentUserId = user?.uid ?? 'demo_user';
                     final isMe = msg.senderId == currentUserId;
                     
-                    // For demo: verify if we "revealed" the tone/translation
-                    // In a real app, this would be computed or stored in the message model
+                    // Use preferredLanguage from provider
+                    String? translationText;
+                    if (preferredLanguage != null && msg.translations != null) {
+                        translationText = msg.translations![preferredLanguage];
+                    }
                     
-                    final translationText = msg.translation?['translation'];
                     final toneReason = msg.tone?['tone'];
 
                     return Align(
                       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
                       child: Container(
                         margin: const EdgeInsets.only(bottom: 16),
-                        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.85), // Increased width for menu
+                        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.85),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.end, // Align menu to bottom of bubble
+                          crossAxisAlignment: CrossAxisAlignment.end,
                           mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
                           children: [
-                            if (isMe) _buildMessageMenu(context, msg), // Menu on Left for Me (optional, usually right for everyone, but let's stick to standard)
+                            if (isMe) _buildMessageMenu(context, msg),
                             
                             Flexible(
                               child: Column(
@@ -204,7 +300,6 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
                                             height: 1.4,
                                           )
                                         ),
-                                        // Only show translation if it exists (simulating it was "requested" or auto-done)
                                         if (translationText != null && translationText != msg.text) ...[
                                            const SizedBox(height: 8),
                                            Container(
@@ -231,14 +326,13 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
                                       ],
                                     ),
                                   ),
-                                  // Tone Tag - Shown outside/below bubble
                                   if (toneReason != null) ...[
                                      const SizedBox(height: 6),
                                      Container(
                                        margin: const EdgeInsets.only(left: 4),
                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                        decoration: BoxDecoration(
-                                         color: const Color(0xFFFEF3C7), // Amber 100
+                                         color: const Color(0xFFFEF3C7),
                                          borderRadius: BorderRadius.circular(12),
                                          border: Border.all(color: const Color(0xFFF59E0B).withOpacity(0.3)),
                                        ),
@@ -256,7 +350,7 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
                               ),
                             ),
                             
-                            if (!isMe) _buildMessageMenu(context, msg), // Menu on Right for Others
+                            if (!isMe) _buildMessageMenu(context, msg),
                           ],
                         ),
                       ),
@@ -267,7 +361,6 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
             ),
           ),
           
-          // Input Area
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -325,8 +418,6 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
       onSelected: (value) async {
         if (value == 'tone') {
            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Analyzing Tone... (Demo: Tone Revealed)")));
-        } else if (value == 'translate') {
-           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Translating...")));
         } else if (value == 'copy') {
            await Clipboard.setData(ClipboardData(text: msg.text));
            if (context.mounted) {
@@ -367,16 +458,6 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
               Icon(Icons.psychology_outlined, size: 20, color: Color(0xFF4338CA)),
               SizedBox(width: 12),
               Text('Analyze Tone'),
-            ],
-          ),
-        ),
-        PopupMenuItem<String>(
-          value: 'translate',
-          child: Row(
-            children: const [
-              Icon(Icons.translate_outlined, size: 20, color: Color(0xFF06B6D4)),
-              SizedBox(width: 12),
-              Text('Translate'),
             ],
           ),
         ),

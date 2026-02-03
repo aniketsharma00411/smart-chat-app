@@ -33,10 +33,8 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   void _handleGoogleSignIn() async {
     setState(() => _isLoading = true);
     try {
-      final credential = await _authService.signInWithGoogle();
-      if (credential != null && mounted) {
-        context.go('/chats'); 
-      }
+      // The router will handle navigation when auth state changes
+      await _authService.signInWithGoogle();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

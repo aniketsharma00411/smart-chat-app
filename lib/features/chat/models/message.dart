@@ -7,6 +7,7 @@ class Message {
   final DateTime timestamp;
   final Map<String, dynamic>? tone; 
   final Map<String, dynamic>? translation; 
+  final Map<String, dynamic>? translations; // {'es': 'Hola', 'fr': 'Bonjour'}
   final String? originalLanguage;
 
   Message({
@@ -17,6 +18,7 @@ class Message {
     this.tone,
     this.translation,
     this.originalLanguage,
+    this.translations,
   });
 
   factory Message.fromMap(Map<String, dynamic> map, String id) {
@@ -33,6 +35,7 @@ class Message {
       tone: map['tone'],
       translation: map['translation'],
       originalLanguage: map['originalLanguage'],
+      translations: map['translations'],
     );
   }
 
@@ -44,6 +47,7 @@ class Message {
       'tone': tone,
       'translation': translation,
       'originalLanguage': originalLanguage,
+      'translations': translations,
     };
   }
 }

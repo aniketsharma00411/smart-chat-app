@@ -44,29 +44,45 @@ class AuthService {
 
   // Save user data to Firestore if new
   Future<void> ensureUserDocument(User? user) async {
-    if (user == null) return;
+    if (user == null) {
+      debugPrint("ensureUserDocument: User is null");
+      return;
+    }
+    
+    debugPrint("ensureUserDocument: Starting for user ${user.uid}");
 
-    final userDoc = _firestore.collection('users').doc(user.uid);
-    final snapshot = await userDoc.get();
+    try {
+      final userDoc = _firestore.collection('users').doc(user.uid);
+      final snapshot = await userDoc.get();
+      debugPrint("ensureUserDocument: Snapshot exists? ${snapshot.exists}");
 
-    if (!snapshot.exists) {
-      // New user
-      String shareId = _generateShareId();
-      await userDoc.set({
-        'uid': user.uid,
-        'email': user.email,
-        'displayName': user.displayName,
-        'photoURL': user.photoURL,
-        'shareId': shareId,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-    } else {
-      // Existing user: Check if shareId is missing (e.g. created before migration)
-      final data = snapshot.data();
-      if (data != null && !data.containsKey('shareId')) {
+      if (!snapshot.exists) {
+        // New user
+        debugPrint("ensureUserDocument: Creating new user document");
         String shareId = _generateShareId();
-        await userDoc.update({'shareId': shareId});
+        await userDoc.set({
+          'uid': user.uid,
+          'email': user.email,
+          'displayName': user.displayName,
+          'photoURL': user.photoURL,
+          'shareId': shareId,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+        debugPrint("ensureUserDocument: User document created successfully");
+      } else {
+        // Existing user: Check if shareId is missing (e.g. created before migration)
+        final data = snapshot.data();
+        if (data != null && !data.containsKey('shareId')) {
+          debugPrint("ensureUserDocument: Updating existing user with shareId");
+          String shareId = _generateShareId();
+          await userDoc.update({'shareId': shareId});
+        } else {
+          debugPrint("ensureUserDocument: User already exists and has shareId");
+        }
       }
+    } catch (e) {
+      debugPrint("ensureUserDocument ERROR: $e");
+      rethrow; // Re-throw to be caught by signInWithGoogle
     }
   }
 
@@ -78,7 +94,13 @@ class AuthService {
 
   // Sign out
   Future<void> signOut() async {
-    await _googleSignIn.signOut();
-    await _auth.signOut();
+    try {
+      if (!kIsWeb) {
+        await _googleSignIn.signOut();
+      }
+      await _auth.signOut();
+    } catch (e) {
+      debugPrint("Error signing out: $e");
+    }
   }
 }

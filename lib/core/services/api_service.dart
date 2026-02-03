@@ -54,4 +54,28 @@ class ApiService {
       return null;
     }
   }
+  // Batch Translate
+  Future<List<Map<String, dynamic>>?> translateBatch(List<Map<String, String>> items, String targetLang) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$_baseUrl/translate-batch'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'target_language': targetLang,
+          'items': items,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return List<Map<String, dynamic>>.from(data['translations']);
+      } else {
+        debugPrint("Batch Translate API Error: ${response.statusCode} - ${response.body}");
+        return null;
+      }
+    } catch (e) {
+      debugPrint("Batch Translate API Exception: $e");
+      return null;
+    }
+  }
 }

@@ -8,6 +8,7 @@ import '../../features/chat/screens/chat_list_screen.dart';
 import '../../features/chat/screens/chat_detail_screen.dart';
 import '../../features/call/screens/call_screen.dart';
 import 'package:smart_chat_app/features/ai_assistant/screens/ai_chat_screen.dart';
+import '../../features/settings/screens/settings_screen.dart';
 
 final authProvider = StreamProvider((ref) => AuthService().authStateChanges);
 final authAuthServiceProvider = Provider((ref) => AuthService());
@@ -19,7 +20,28 @@ final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     initialLocation: '/',
     redirect: (context, state) {
-      // Temp disable auth guard for UI demo
+      debugPrint("🔄 Router Redirect Check: Location: ${state.uri}, AuthLoading: ${authState.isLoading}, HasValue: ${authState.asData?.value != null}");
+      
+      final isLoggedIn = authState.asData?.value != null;
+      final isLoggingIn = state.uri.toString() == '/login';
+      final isSplash = state.uri.toString() == '/';
+
+      if (authState.isLoading) {
+        debugPrint("⏳ Auth is loading, staying on Splash");
+        return '/';
+      }
+
+      if (!isLoggedIn && !isLoggingIn) {
+        debugPrint("🔒 Not logged in, redirecting to /login");
+        return '/login';
+      }
+
+      if (isLoggedIn && (isLoggingIn || isSplash)) {
+        debugPrint("✅ Logged in, redirecting to /chats");
+        return '/chats';
+      }
+
+      debugPrint("➡ No redirect needed");
       return null;
     },
     routes: [
@@ -53,8 +75,12 @@ final routerProvider = Provider<GoRouter>((ref) {
         },
       ),
       GoRoute(
-        path: '/call',
-        builder: (context, state) => const CallScreen(),
+        path: '/settings',
+        builder: (context, state) => const SettingsScreen(),
+      ),
+      GoRoute(
+        path: '/call/:callId',
+        builder: (context, state) => CallScreen(callId: state.pathParameters['callId']!),
       ),
     ],
   );
