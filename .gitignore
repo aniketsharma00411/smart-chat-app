@@ -124,10 +124,6 @@ android/app/google-services.json
 ios/Runner/GoogleService-Info.plist
 macos/Runner/GoogleService-Info.plist
 
-# API Configuration
-lib/core/config/api_config.dart
-# ZEGOCLOUD Configuration
-lib/core/services/call_service_agora.dart
 # Secrets
 .env
 

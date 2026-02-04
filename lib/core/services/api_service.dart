@@ -5,10 +5,11 @@ import 'package:flutter/foundation.dart';
 import '../config/api_config.dart';
 
 class ApiService {
-  static const String _baseUrl = ApiConfig.baseUrl;
+  static String get _baseUrl => ApiConfig.baseUrl;
 
   // Analyze Tone
-  Future<Map<String, dynamic>?> analyzeTone(String text, List<String> history) async {
+  Future<Map<String, dynamic>?> analyzeTone(
+      String text, List<String> history) async {
     try {
       final response = await http.post(
         Uri.parse('$_baseUrl/tone'),
@@ -18,6 +19,7 @@ class ApiService {
           'conversation_history': history,
         }),
       );
+      print("Tone API Response: ${response.body}");
 
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
@@ -32,7 +34,8 @@ class ApiService {
   }
 
   // Translate Message
-  Future<Map<String, dynamic>?> translateMessage(String text, String targetLang) async {
+  Future<Map<String, dynamic>?> translateMessage(
+      String text, String targetLang) async {
     try {
       final response = await http.post(
         Uri.parse('$_baseUrl/translate'),
@@ -46,7 +49,8 @@ class ApiService {
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
       } else {
-        debugPrint("Translate API Error: ${response.statusCode} - ${response.body}");
+        debugPrint(
+            "Translate API Error: ${response.statusCode} - ${response.body}");
         return null;
       }
     } catch (e) {
@@ -54,8 +58,13 @@ class ApiService {
       return null;
     }
   }
+
   // Batch Translate
-  Future<List<Map<String, dynamic>>?> translateBatch(List<Map<String, String>> items, String targetLang) async {
+  Future<List<Map<String, dynamic>>?> translateBatch(
+      List<Map<String, String>> items, String targetLang) async {
+    debugPrint("Batch Translate skipped.");
+    return null;
+
     try {
       final response = await http.post(
         Uri.parse('$_baseUrl/translate-batch'),
@@ -70,7 +79,8 @@ class ApiService {
         final data = jsonDecode(response.body);
         return List<Map<String, dynamic>>.from(data['translations']);
       } else {
-        debugPrint("Batch Translate API Error: ${response.statusCode} - ${response.body}");
+        debugPrint(
+            "Batch Translate API Error: ${response.statusCode} - ${response.body}");
         return null;
       }
     } catch (e) {

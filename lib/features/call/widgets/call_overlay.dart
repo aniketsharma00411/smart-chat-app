@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
+
 import 'package:smart_chat_app/core/router/app_router.dart';
 import '../../../core/providers/providers.dart';
 
@@ -20,11 +20,12 @@ class CallOverlay extends ConsumerWidget {
       if (calls.isNotEmpty) {
         final activeCall = calls.first;
         if (activeCall['status'] == 'ringing') {
-          ref.read(agoraCallServiceProvider).playIncomingTone();
+          // TODO: Implement Ringtone in CallService
+          // ref.read(callServiceProvider).playIncomingTone();
         }
       } else {
         // If calls becomes empty, stop any ringing
-        ref.read(agoraCallServiceProvider).stopTones();
+        // ref.read(callServiceProvider).stopTones();
       }
     });
 
@@ -37,7 +38,7 @@ class CallOverlay extends ConsumerWidget {
           data: (calls) {
             if (calls.isEmpty) return const SizedBox.shrink();
 
-            final activeCall = calls.first; 
+            final activeCall = calls.first;
             final callerId = activeCall['callerId'];
             final callId = activeCall['id'];
 
@@ -70,17 +71,24 @@ class CallOverlay extends ConsumerWidget {
                         children: [
                           const Text(
                             "Incoming Audio Call",
-                            style: TextStyle(color: Colors.indigo, fontWeight: FontWeight.bold, fontSize: 14),
+                            style: TextStyle(
+                                color: Colors.indigo,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14),
                           ),
                           const SizedBox(height: 16),
                           CircleAvatar(
                             radius: 40,
-                            backgroundImage: photoURL != null ? NetworkImage(photoURL) : const NetworkImage('https://i.pravatar.cc/150'),
+                            backgroundImage: photoURL != null
+                                ? NetworkImage(photoURL)
+                                : const NetworkImage(
+                                    'https://i.pravatar.cc/150'),
                           ),
                           const SizedBox(height: 16),
                           Text(
                             displayName,
-                            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                            style: const TextStyle(
+                                fontSize: 20, fontWeight: FontWeight.bold),
                           ),
                           const SizedBox(height: 24),
                           Row(
@@ -91,8 +99,10 @@ class CallOverlay extends ConsumerWidget {
                                 label: "Decline",
                                 color: Colors.red,
                                 onTap: () {
-                                  ref.read(agoraCallServiceProvider).stopTones();
-                                  ref.read(firestoreServiceProvider).updateCallStatus(callId, 'rejected');
+                                  // ref.read(callServiceProvider).stopTones();
+                                  ref
+                                      .read(firestoreServiceProvider)
+                                      .updateCallStatus(callId, 'rejected');
                                 },
                               ),
                               _CallActionButton(
@@ -101,10 +111,15 @@ class CallOverlay extends ConsumerWidget {
                                 color: Colors.green,
                                 onTap: () async {
                                   debugPrint("📞 Accepting call: $callId");
-                                  ref.read(agoraCallServiceProvider).stopTones();
-                                  await ref.read(firestoreServiceProvider).updateCallStatus(callId, 'accepted');
-                                  debugPrint("✅ Call status updated to accepted. Navigating...");
-                                  ref.read(routerProvider).push('/call/$callId');
+                                  // ref.read(callServiceProvider).stopTones();
+                                  await ref
+                                      .read(firestoreServiceProvider)
+                                      .updateCallStatus(callId, 'accepted');
+                                  debugPrint(
+                                      "✅ Call status updated to accepted. Navigating...");
+                                  ref
+                                      .read(routerProvider)
+                                      .push('/call/$callId');
                                 },
                               ),
                             ],
@@ -147,12 +162,15 @@ class _CallActionButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(30),
           child: Container(
             padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle),
+            decoration: BoxDecoration(
+                color: color.withOpacity(0.1), shape: BoxShape.circle),
             child: Icon(icon, color: color, size: 32),
           ),
         ),
         const SizedBox(height: 8),
-        Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w600, fontSize: 12)),
+        Text(label,
+            style: TextStyle(
+                color: color, fontWeight: FontWeight.w600, fontSize: 12)),
       ],
     );
   }

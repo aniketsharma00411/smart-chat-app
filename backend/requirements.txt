@@ -3,3 +3,7 @@ uvicorn
 google-genai
 pydantic
 python-dotenv
+google-cloud-speech
+google-cloud-translate
+google-cloud-texttospeech
+websockets
