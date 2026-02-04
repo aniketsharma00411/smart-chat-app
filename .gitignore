@@ -176,3 +176,8 @@ ENV/
 
 # Miscellaneous
 .DS_Store
+
+# Firebase Service Files
+google-services.json
+GoogleService-Info.plist
+service-account.json
