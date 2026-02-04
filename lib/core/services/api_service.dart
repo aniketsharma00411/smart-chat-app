@@ -62,9 +62,6 @@ class ApiService {
   // Batch Translate
   Future<List<Map<String, dynamic>>?> translateBatch(
       List<Map<String, String>> items, String targetLang) async {
-    debugPrint("Batch Translate skipped.");
-    return null;
-
     try {
       final response = await http.post(
         Uri.parse('$_baseUrl/translate-batch'),
@@ -74,6 +71,9 @@ class ApiService {
           'items': items,
         }),
       );
+
+      print(
+          "Batch Translate Response: ${response.statusCode} ${response.body}");
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -85,6 +85,33 @@ class ApiService {
       }
     } catch (e) {
       debugPrint("Batch Translate API Exception: $e");
+      return null;
+    }
+  }
+
+  // Rewrite Message
+  Future<String?> rewriteMessage(String text,
+      {String tone = "professional"}) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$_baseUrl/rewrite'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'text': text,
+          'tone': tone,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['rewritten_text'];
+      } else {
+        debugPrint(
+            "Rewrite API Error: ${response.statusCode} - ${response.body}");
+        return null;
+      }
+    } catch (e) {
+      debugPrint("Rewrite API Exception: $e");
       return null;
     }
   }

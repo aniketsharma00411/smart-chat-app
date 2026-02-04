@@ -189,21 +189,6 @@ class _AIChatScreenState extends ConsumerState<AIChatScreen> {
                             ),
                           ),
                         ),
-                        if (!isUser) ...[
-                          const SizedBox(height: 6),
-                          const Row(
-                            children: [
-                              Icon(Icons.auto_awesome,
-                                  size: 12, color: AppTheme.primaryAccent),
-                              SizedBox(width: 4),
-                              Text("AI Generated",
-                                  style: TextStyle(
-                                      fontSize: 10,
-                                      color: AppTheme.primaryAccent,
-                                      fontWeight: FontWeight.bold)),
-                            ],
-                          ),
-                        ]
                       ],
                     ),
                   ),

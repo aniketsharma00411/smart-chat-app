@@ -159,6 +159,91 @@ async def translate_message(request: TranslateRequest):
         logger.error(f"Gemini Translation Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+class BatchTranslateItem(BaseModel):
+    id: str
+    text: str
+
+class BatchTranslateRequest(BaseModel):
+    items: List[BatchTranslateItem]
+    target_language: str
+
+class BatchTranslateResponse(BaseModel):
+    translations: List[Dict[str, str]]
+
+@app.post("/api/translate-batch", response_model=BatchTranslateResponse)
+async def translate_batch(request: BatchTranslateRequest):
+    client = get_gemini_client()
+    
+    # optimize: we could structure one giant prompt, or loop.
+    # For < 20 messages, a single prompt is faster and cheaper.
+    
+    items_text = "\n".join([f"ID:{item.id} TEXT:{item.text}" for item in request.items])
+    
+    prompt = f"""
+    Translate the following messages to {request.target_language}.
+    Maintain the tone and meaning.
+    
+    Messages:
+    {items_text}
+    
+    Return JSON only using this format:
+    {{
+        "translations": [
+            {{ "id": "ID_FROM_INPUT", "translated_text": "TRANSLATED_TEXT" }}
+        ]
+    }}
+    """
+    
+    try:
+        response = client.models.generate_content(
+            model=GEMINI_MODEL_NAME,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json"
+            )
+        )
+        result = json.loads(response.text)
+        return BatchTranslateResponse(translations=result.get("translations", []))
+    except Exception as e:
+        logger.error(f"Batch Translate Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+class RewriteRequest(BaseModel):
+    text: str
+    tone: Optional[str] = "more professional and concise"
+
+class RewriteResponse(BaseModel):
+    rewritten_text: str
+
+@app.post("/api/rewrite", response_model=RewriteResponse)
+async def rewrite_message(request: RewriteRequest):
+    client = get_gemini_client()
+    prompt = f"""
+    Rewrite the following text to be {request.tone}.
+    Keep the meaning the same but improve the clarity and style.
+    
+    Text: "{request.text}"
+    
+    Return JSON only:
+    {{
+        "rewritten_text": "The rewritten text"
+    }}
+    """
+    
+    try:
+        response = client.models.generate_content(
+            model=GEMINI_MODEL_NAME,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json"
+            )
+        )
+        result = json.loads(response.text)
+        return RewriteResponse(rewritten_text=result.get("rewritten_text", request.text))
+    except Exception as e:
+        logger.error(f"Rewrite Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/health")
 def health_check():
     return {

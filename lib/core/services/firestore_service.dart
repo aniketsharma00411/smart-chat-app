@@ -30,14 +30,14 @@ class FirestoreService {
         .doc(chatId)
         .collection('messages')
         .add(messageData);
-        
+
     // Update last message in chat document
     await _firestore.collection('chats').doc(chatId).update({
       'lastMessage': message.text,
       'lastTimestamp': FieldValue.serverTimestamp(),
     });
   }
-  
+
   // Search user by Share ID (Legacy, but kept for compatibility if needed)
   Future<Map<String, dynamic>?> searchUserByShareId(String shareId) async {
     final snapshot = await _firestore
@@ -51,7 +51,7 @@ class FirestoreService {
     }
     return null;
   }
-  
+
   // Search user by Email
   Future<Map<String, dynamic>?> searchUserByEmail(String email) async {
     final snapshot = await _firestore
@@ -65,9 +65,10 @@ class FirestoreService {
     }
     return null;
   }
-  
+
   // Add Contact
-  Future<void> addContact(String currentUserId, Map<String, dynamic> contactUser) async {
+  Future<void> addContact(
+      String currentUserId, Map<String, dynamic> contactUser) async {
     await _firestore
         .collection('users')
         .doc(currentUserId)
@@ -82,8 +83,6 @@ class FirestoreService {
     });
   }
 
-
-  
   // Get Contacts Stream
   Stream<List<Map<String, dynamic>>> getContacts(String currentUserId) {
     return _firestore
@@ -96,14 +95,29 @@ class FirestoreService {
       return snapshot.docs.map((doc) => doc.data()).toList();
     });
   }
-  
+
   // Get Chats for User
   Stream<List<Map<String, dynamic>>> getChats(String uid) {
     return _firestore
         .collection('chats')
         .where('participants', arrayContains: uid)
         .snapshots()
-        .map((snapshot) => snapshot.docs.map((doc) => {...doc.data(), 'id': doc.id}).toList());
+        .map((snapshot) {
+      final chats =
+          snapshot.docs.map((doc) => {...doc.data(), 'id': doc.id}).toList();
+
+      // Sort by lastTimestamp descending
+      chats.sort((a, b) {
+        final t1 = a['lastTimestamp'] as Timestamp?;
+        final t2 = b['lastTimestamp'] as Timestamp?;
+        if (t1 == null && t2 == null) return 0;
+        if (t1 == null) return 1;
+        if (t2 == null) return -1;
+        return t2.compareTo(t1);
+      });
+
+      return chats;
+    });
   }
 
   // Get Single Chat
@@ -118,10 +132,10 @@ class FirestoreService {
     List<String> ids = [currentUserId, otherUserId];
     ids.sort();
     String chatId = ids.join('_');
-    
+
     final chatDoc = _firestore.collection('chats').doc(chatId);
     final snapshot = await chatDoc.get();
-    
+
     if (!snapshot.exists) {
       await chatDoc.set({
         'participants': ids,
@@ -130,10 +144,10 @@ class FirestoreService {
         'lastTimestamp': FieldValue.serverTimestamp(),
       });
     }
-    
+
     return chatId;
   }
-  
+
   // Get User Profile
   Future<Map<String, dynamic>?> getUser(String uid) async {
     final doc = await _firestore.collection('users').doc(uid).get();
@@ -142,7 +156,11 @@ class FirestoreService {
 
   // Get User Profile Stream
   Stream<Map<String, dynamic>?> getUserStream(String uid) {
-    return _firestore.collection('users').doc(uid).snapshots().map((snapshot) => snapshot.data());
+    return _firestore
+        .collection('users')
+        .doc(uid)
+        .snapshots()
+        .map((snapshot) => snapshot.data());
   }
 
   // Update User Preferred Language
@@ -153,29 +171,28 @@ class FirestoreService {
   }
 
   // Save Batch Translations
-  Future<void> saveBatchTranslations(String chatId, List<Map<String, dynamic>> translations, String targetLanguage) async {
+  Future<void> saveBatchTranslations(String chatId,
+      List<Map<String, dynamic>> translations, String targetLanguage) async {
     final batch = _firestore.batch();
-    
+
     for (var item in translations) {
       final messageId = item['id'];
       final translatedText = item['translated_text'];
-      
+
       if (messageId != null && translatedText != null) {
         final docRef = _firestore
             .collection('chats')
             .doc(chatId)
             .collection('messages')
             .doc(messageId);
-            
-        batch.update(docRef, {
-          'translations.$targetLanguage': translatedText
-        });
+
+        batch.update(docRef, {'translations.$targetLanguage': translatedText});
       }
     }
-    
+
     await batch.commit();
   }
-  
+
   // --- CALL SIGNALING ---
 
   Future<String> createCall(String callerId, String receiverId) async {
@@ -211,6 +228,10 @@ class FirestoreService {
   }
 
   Stream<Map<String, dynamic>?> streamCall(String callId) {
-    return _firestore.collection('calls').doc(callId).snapshots().map((doc) => doc.data());
+    return _firestore
+        .collection('calls')
+        .doc(callId)
+        .snapshots()
+        .map((doc) => doc.data());
   }
 }
