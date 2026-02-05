@@ -211,6 +211,7 @@ async def translate_batch(request: BatchTranslateRequest):
 class RewriteRequest(BaseModel):
     text: str
     tone: Optional[str] = "more professional and concise"
+    instruction: Optional[str] = None
 
 class RewriteResponse(BaseModel):
     rewritten_text: str
@@ -218,9 +219,21 @@ class RewriteResponse(BaseModel):
 @app.post("/api/rewrite", response_model=RewriteResponse)
 async def rewrite_message(request: RewriteRequest):
     client = get_gemini_client()
+    
+    # Construct prompt based on available inputs
+    if request.instruction:
+        # If instruction is present, it takes precedence or combines
+        prompt_instruction = f"Instruction: {request.instruction}"
+        if request.tone:
+             prompt_instruction += f"\nAlso keep this tone in mind: {request.tone}"
+    else:
+        # Default to tone-based rewrite
+        prompt_instruction = f"Rewrite the text to be {request.tone}."
+
     prompt = f"""
-    Rewrite the following text to be {request.tone}.
-    Keep the meaning the same but improve the clarity and style.
+    You are an expert editor.
+    {prompt_instruction}
+    Keep the meaning the same but improve the clarity and style as requested.
     
     Text: "{request.text}"
     

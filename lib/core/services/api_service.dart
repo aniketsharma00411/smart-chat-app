@@ -89,9 +89,8 @@ class ApiService {
     }
   }
 
-  // Rewrite Message
   Future<String?> rewriteMessage(String text,
-      {String tone = "professional"}) async {
+      {String tone = "professional", String? instruction}) async {
     try {
       final response = await http.post(
         Uri.parse('$_baseUrl/rewrite'),
@@ -99,6 +98,7 @@ class ApiService {
         body: jsonEncode({
           'text': text,
           'tone': tone,
+          if (instruction != null) 'instruction': instruction,
         }),
       );
 
