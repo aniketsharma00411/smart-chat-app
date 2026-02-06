@@ -9,7 +9,8 @@ class LoginScreen extends StatefulWidget {
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStateMixin {
+class _LoginScreenState extends State<LoginScreen>
+    with SingleTickerProviderStateMixin {
   final AuthService _authService = AuthService();
   bool _isLoading = false;
 
@@ -19,8 +20,10 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 1000));
-    _fadeAnimation = CurvedAnimation(parent: _controller, curve: Curves.easeOut);
+    _controller = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 1000));
+    _fadeAnimation =
+        CurvedAnimation(parent: _controller, curve: Curves.easeOut);
     _controller.forward();
   }
 
@@ -38,7 +41,8 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Login Failed: $e'), backgroundColor: Colors.red),
+          SnackBar(
+              content: Text('Login Failed: $e'), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -75,35 +79,45 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                         color: Colors.white.withOpacity(0.9),
                         borderRadius: BorderRadius.circular(24),
                         boxShadow: [
-                           BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 20, offset: const Offset(0, 10))
+                          BoxShadow(
+                              color: Colors.black.withOpacity(0.2),
+                              blurRadius: 20,
+                              offset: const Offset(0, 10))
                         ],
                       ),
                       child: Column(
                         children: [
                           Container(
                             padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFEEF2FF),
+                            decoration: const BoxDecoration(
+                              color: Color(0xFFEEF2FF),
                               shape: BoxShape.circle,
                             ),
-                            child: const Icon(Icons.chat_bubble, size: 48, color: Color(0xFF4338CA)),
+                            child: const Icon(Icons.chat_bubble,
+                                size: 48, color: Color(0xFF4338CA)),
                           ),
                           const SizedBox(height: 24),
                           Text(
                             'Welcome Back',
-                            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: const Color(0xFF1E293B),
-                            ),
+                            style: Theme.of(context)
+                                .textTheme
+                                .headlineMedium
+                                ?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: const Color(0xFF1E293B),
+                                ),
                           ),
                           const SizedBox(height: 8),
                           Text(
                             'Multilingual communication,\nreimagined for teams.',
                             textAlign: TextAlign.center,
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: const Color(0xFF64748B),
-                              height: 1.5,
-                            ),
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(
+                                  color: const Color(0xFF64748B),
+                                  height: 1.5,
+                                ),
                           ),
                           const SizedBox(height: 40),
                           if (_isLoading)
@@ -114,15 +128,16 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                 ElevatedButton(
                                   onPressed: _handleGoogleSignIn,
                                   style: ElevatedButton.styleFrom(
-                                    minimumSize: const Size(double.infinity, 56),
+                                    minimumSize:
+                                        const Size(double.infinity, 56),
                                     shadowColor: const Color(0x4D4338CA),
                                     elevation: 8,
                                   ),
-                                  child: Row(
+                                  child: const Row(
                                     mainAxisAlignment: MainAxisAlignment.center,
-                                    children: const [
-                                       // In real app use Google Logo asset
-                                      Icon(Icons.login, size: 24), 
+                                    children: [
+                                      // In real app use Google Logo asset
+                                      Icon(Icons.login, size: 24),
                                       SizedBox(width: 12),
                                       Text("Sign in with Google"),
                                     ],
@@ -131,11 +146,12 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                 const SizedBox(height: 16),
                                 TextButton(
                                   onPressed: () => context.go('/chats'),
-                                  child: const Text("View UI Demo (Skip Login)", style: TextStyle(color: Color(0xFF64748B))),
+                                  child: const Text("View UI Demo (Skip Login)",
+                                      style:
+                                          TextStyle(color: Color(0xFF64748B))),
                                 ),
                               ],
                             ),
-                          
                         ],
                       ),
                     ),

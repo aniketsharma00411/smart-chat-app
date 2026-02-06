@@ -48,6 +48,15 @@ class _CallScreenState extends ConsumerState<CallScreen>
       }
     });
 
+    // Listen to mic state
+    callService.isMicOn.listen((isMicOn) {
+      if (mounted) {
+        setState(() {
+          _isMicOff = !isMicOn;
+        });
+      }
+    });
+
     try {
       await callService.joinCall(widget.callId);
     } catch (e) {
@@ -135,7 +144,7 @@ class _CallScreenState extends ConsumerState<CallScreen>
                   const SizedBox(height: 4),
                   Text(
                     "ID: ${widget.callId}", // Debug ID
-                    style: TextStyle(color: Colors.white30, fontSize: 8),
+                    style: const TextStyle(color: Colors.white30, fontSize: 8),
                   ),
                   const SizedBox(height: 40),
 
@@ -214,9 +223,7 @@ class _CallScreenState extends ConsumerState<CallScreen>
                           icon: _isMicOff ? Icons.mic_off : Icons.mic,
                           isActive: !_isMicOff,
                           onTap: () {
-                            // TODO: Implement toggle in Service
-                            setState(() => _isMicOff = !_isMicOff);
-                            // ref.read(callServiceProvider).toggleMic();
+                            ref.read(callServiceProvider).toggleMic();
                           },
                         ),
                         _ControlButton(

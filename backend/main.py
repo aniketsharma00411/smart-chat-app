@@ -47,16 +47,42 @@ if not GEMINI_API_KEY:
 # We initialize these globally for simplicity in this example, 
 # ensuring they pick up credentials from env (GOOGLE_APPLICATION_CREDENTIALS)
 
-try:
-    speech_client = speech.SpeechAsyncClient()
-    translate_client = translate.Client()
-    tts_client = texttospeech.TextToSpeechClient()
-    logger.info("✅ Google Cloud Clients initialized successfully.")
-except Exception as e:
-    logger.error(f"❌ Failed to initialize Google Cloud Clients: {e}")
-    speech_client = None
-    translate_client = None
-    tts_client = None
+speech_client = None
+translate_client = None
+tts_client = None
+
+@app.on_event("startup")
+async def startup_event():
+    global speech_client, translate_client, tts_client
+    try:
+        # Initialize Google Cloud Clients
+        speech_client = speech.SpeechAsyncClient()
+        translate_client = translate.Client()
+        tts_client = texttospeech.TextToSpeechAsyncClient()
+        logger.info("✅ Google Cloud Clients initialized successfully.")
+        
+        # Connection Test
+        try:
+             logger.info("🧪 Testing Google Speech API Connection...")
+             config = speech.RecognitionConfig(
+                encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
+                sample_rate_hertz=16000,
+                language_code="en-US",
+             )
+             # Send a tiny bit of silence or dummy audio
+             dummy_audio = speech.RecognitionAudio(content=b'\0' * 3200) 
+             # Use the synchronous recognize (via run_in_executor if needed, or just regular async call if available)
+             # SpeechAsyncClient has recognize method too
+             await speech_client.recognize(config=config, audio=dummy_audio)
+             logger.info("✅ Google Speech API Connection Verified.")
+        except Exception as e:
+             logger.error(f"❌ Google Speech API Connection Failed: {e}")
+
+    except Exception as e:
+        logger.error(f"Failed to initialize Google Cloud Clients: {e}")
+        speech_client = None
+        translate_client = None
+        tts_client = None
 
 # --- Helper Models & Functions ---
 
@@ -332,10 +358,11 @@ async def websocket_endpoint(websocket: WebSocket, call_id: str, target_lang: st
 
     # Start audio processing task if supported
     process_task = None
-    if speech_client and translate_client and tts_client:
-        process_task = asyncio.create_task(run_translation_loop(websocket, call_id, target_lang, stt_generator()))
-    else:
-        logger.warning("Cloud clients missing, running in Echo/Passthrough mode only.")
+    
+    # if speech_client and translate_client and tts_client:
+    #     process_task = asyncio.create_task(run_translation_loop(websocket, call_id, target_lang, stt_generator()))
+    # else:
+    #     logger.warning("Cloud clients missing, running in Echo/Passthrough mode only.")
 
     try:
         while True:
@@ -347,11 +374,18 @@ async def websocket_endpoint(websocket: WebSocket, call_id: str, target_lang: st
                 audio_bytes = data["bytes"]
                 
                 # 1. Helper: Broadcast raw audio to others (Standard Call functionality)
-                # await manager.broadcast_bytes(audio_bytes, call_id, exclude=websocket)
+                # RELAY MODE: Broadcast received audio to other participants
+                num_connections = len(manager.active_connections.get(call_id, []))
+                logger.info(f"📤 RECV {len(audio_bytes)} bytes | Broadcasting to {num_connections} connections (exclude sender)")
+                # ECHO OFF: Exclude sender so they don't hear themselves
+                await manager.broadcast_bytes(audio_bytes, call_id, exclude=websocket)
                 
-                # 2. Feed to STT Loop
-                if process_task:
-                    request_queue.put_nowait(audio_bytes)
+                # 2. Feed to STT Loop (DISABLED REQUESTED)
+                # if process_task:
+                #     # logger.info(f"🎤 Received {len(audio_bytes)} bytes from client") # Uncomment to debug transport
+                #     request_queue.put_nowait(audio_bytes)
+                #    if request_queue.qsize() % 50 == 0:
+                #        logger.info(f"📥 Backend Queue Size: {request_queue.qsize()}")
 
             elif "text" in data and data["text"]:
                 # Handle control messages if any
@@ -385,12 +419,19 @@ async def run_translation_loop(websocket: WebSocket, call_id: str, target_lang: 
 
     async def request_stream_wrapper(config, audio_stream):
         # Yield the configuration as the first request
+        logger.info("🎤 STT Stream: Yielding Config...")
         yield speech.StreamingRecognizeRequest(streaming_config=config)
         # Then yield audio chunks from the input stream
+        chunk_count = 0
         async for audio_request in audio_stream:
+            chunk_count += 1
+            if chunk_count % 50 == 0:
+                 logger.info(f"🎤 STT Stream: Processed {chunk_count} chunks")
             yield audio_request
+        logger.info("🎤 STT Stream: Input stream ended.")
 
     try:
+        logger.info("🎤 STT: Starting streaming_recognize...")
         # The async client requires the config to be the first item in the requests iterator
         # It does NOT accept 'config' as a keyword argument when 'requests' is provided.
         responses = await speech_client.streaming_recognize(
@@ -408,6 +449,9 @@ async def run_translation_loop(websocket: WebSocket, call_id: str, target_lang: 
             transcript = result.alternatives[0].transcript
             confidence = result.alternatives[0].confidence
             logger.info(f"🎤 STT: {transcript} (conf: {confidence})")
+
+            if not transcript.strip():
+                continue
 
             # 1. Translate
             # Use 'base' model for speed
@@ -430,7 +474,7 @@ async def run_translation_loop(websocket: WebSocket, call_id: str, target_lang: 
                 sample_rate_hertz=SAMPLE_RATE
             )
 
-            tts_response = tts_client.synthesize_speech(
+            tts_response = await tts_client.synthesize_speech(
                 input=synthesis_input, voice=voice, audio_config=audio_config
             )
             
@@ -442,6 +486,41 @@ async def run_translation_loop(websocket: WebSocket, call_id: str, target_lang: 
     except Exception as e:
         logger.error(f"Translation Loop Failed: {e}")
 
+
+async def run_test_tone_generator(websocket: WebSocket):
+    """Generates a 440Hz sine wave and streams it to the client."""
+    logger.info("🎵 Starting Backend Test Tone Generator (440Hz)...")
+    sample_rate = 16000
+    frequency = 440
+    amplitude = 10000  # Reasonable volume
+    
+    # Pre-compute one cycle or a small chunk
+    chunk_duration_ms = 20
+    samples_per_chunk = int(sample_rate * chunk_duration_ms / 1000)
+    
+    import math
+    import struct
+    
+    # Continuous phase
+    phase = 0.0
+    
+    try:
+        while True:
+            chunk_data = bytearray()
+            for _ in range(samples_per_chunk):
+                sample = int(amplitude * math.sin(2 * math.pi * frequency * phase))
+                # Increment phase time
+                phase += 1.0 / sample_rate
+                # Wrap phase to avoid float precision issues over long time (optional for test)
+                if phase > 1.0: phase -= 1.0 # Approximate wrap for simple sine
+                
+                chunk_data.extend(struct.pack("<h", sample)) # Little-endian Int16
+            
+            await websocket.send_bytes(chunk_data)
+            await asyncio.sleep(chunk_duration_ms / 1000)
+            
+    except Exception as e:
+        logger.error(f"Test Tone Generator Failed: {e}")
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))

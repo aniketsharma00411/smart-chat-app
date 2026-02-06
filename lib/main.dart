@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:flutter/foundation.dart';
 import 'core/theme/app_theme.dart';
 import 'core/router/app_router.dart';
 import 'core/services/auth_service.dart';
@@ -16,7 +15,12 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   debugPrint("🚀 Starting App initialization...");
 
-  await dotenv.load(fileName: ".env");
+  try {
+    await dotenv.load(fileName: ".env");
+    debugPrint("✅ Loaded .env file");
+  } catch (e) {
+    debugPrint("⚠️ No .env file found, using defaults: $e");
+  }
 
   try {
     await Firebase.initializeApp(

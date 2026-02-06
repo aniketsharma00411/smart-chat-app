@@ -8,6 +8,8 @@ abstract class CallService {
   Future<void> joinCall(String callId);
 
   Future<void> endCall();
+  
+  void toggleMic();
 
   void dispose();
 

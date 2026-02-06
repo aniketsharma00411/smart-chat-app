@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:smart_chat_app/core/providers/providers.dart';
@@ -148,10 +147,11 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
                 Expanded(
                   child: ref.watch(chatProvider(widget.chatId)).when(
                         data: (chat) {
-                          if (chat == null)
+                          if (chat == null) {
                             return const Text("Chat",
                                 style: TextStyle(
                                     color: Colors.white, fontSize: 18));
+                          }
                           final participants =
                               List<String>.from(chat['participants'] ?? []);
                           final otherUserId = participants.firstWhere(
@@ -274,10 +274,12 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
             child: StreamBuilder<List<Message>>(
               stream: messagesStream,
               builder: (context, snapshot) {
-                if (snapshot.hasError)
+                if (snapshot.hasError) {
                   return Center(child: Text("Error: ${snapshot.error}"));
-                if (!snapshot.hasData)
+                }
+                if (!snapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());
+                }
 
                 final messages = snapshot.data!;
 
@@ -286,11 +288,11 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
                   _batchTranslateIfNeeded(messages, preferredLanguage);
                 });
 
-                if (messages.isEmpty)
-                  return Center(
+                if (messages.isEmpty) {
+                  return const Center(
                       child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
-                    children: const [
+                    children: [
                       Icon(Icons.mark_chat_unread_outlined,
                           size: 64, color: Colors.grey),
                       SizedBox(height: 16),
@@ -298,6 +300,7 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
                           style: TextStyle(color: Colors.grey)),
                     ],
                   ));
+                }
 
                 return ListView.builder(
                   controller: _scrollController,
@@ -581,11 +584,10 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
                   const SizedBox(width: 8),
                   GestureDetector(
                     onTap: _sendMessage,
-                    child: CircleAvatar(
-                      backgroundColor: const Color(0xFF4338CA),
+                    child: const CircleAvatar(
+                      backgroundColor: Color(0xFF4338CA),
                       radius: 24,
-                      child:
-                          const Icon(Icons.send, color: Colors.white, size: 20),
+                      child: Icon(Icons.send, color: Colors.white, size: 20),
                     ),
                   ),
                 ],
@@ -653,10 +655,10 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
         }
       },
       itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-        PopupMenuItem<String>(
+        const PopupMenuItem<String>(
           value: 'explain',
           child: Row(
-            children: const [
+            children: [
               Icon(Icons.lightbulb_outline, size: 20, color: Color(0xFFF59E0B)),
               SizedBox(width: 12),
               Text('Explain Context'),
@@ -664,10 +666,10 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
           ),
         ),
         const PopupMenuDivider(),
-        PopupMenuItem<String>(
+        const PopupMenuItem<String>(
           value: 'tone',
           child: Row(
-            children: const [
+            children: [
               Icon(Icons.psychology_outlined,
                   size: 20, color: Color(0xFF4338CA)),
               SizedBox(width: 12),
@@ -676,10 +678,10 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
           ),
         ),
         const PopupMenuDivider(),
-        PopupMenuItem<String>(
+        const PopupMenuItem<String>(
           value: 'copy',
           child: Row(
-            children: const [
+            children: [
               Icon(Icons.copy_outlined, size: 20),
               SizedBox(width: 12),
               Text('Copy Text'),
