@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/providers/providers.dart';
+import '../widgets/call_settings_sheet.dart';
 
 class CallScreen extends ConsumerStatefulWidget {
   final String callId;
@@ -17,6 +18,8 @@ class _CallScreenState extends ConsumerState<CallScreen>
     with SingleTickerProviderStateMixin {
   bool _isMicOff = false;
   bool _isSpeakerOn = true;
+  bool _isDubbingEnabled = false;
+  String _targetLanguage = 'es';
   String _connectionStatus = "Connecting to Server...";
   late AnimationController _pulseController;
 
@@ -53,6 +56,24 @@ class _CallScreenState extends ConsumerState<CallScreen>
       if (mounted) {
         setState(() {
           _isMicOff = !isMicOn;
+        });
+      }
+    });
+
+    // Listen to dubbing state
+    callService.isDubbingEnabled.listen((enabled) {
+      if (mounted) {
+        setState(() {
+          _isDubbingEnabled = enabled;
+        });
+      }
+    });
+
+    // Listen to target language
+    callService.targetLanguage.listen((language) {
+      if (mounted) {
+        setState(() {
+          _targetLanguage = language;
         });
       }
     });
@@ -141,6 +162,43 @@ class _CallScreenState extends ConsumerState<CallScreen>
                       ),
                     ],
                   ),
+                  // Language Badge (when dubbing is enabled)
+                  if (_isDubbingEnabled) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.3),
+                          width: 1,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.translate,
+                            size: 14,
+                            color: Colors.white70,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            _getLanguageName(_targetLanguage),
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 4),
                   Text(
                     "ID: ${widget.callId}", // Debug ID
@@ -227,6 +285,11 @@ class _CallScreenState extends ConsumerState<CallScreen>
                           },
                         ),
                         _ControlButton(
+                          icon: Icons.settings,
+                          isActive: false,
+                          onTap: _showCallSettings,
+                        ),
+                        _ControlButton(
                           icon: Icons.call_end,
                           color: Colors.red,
                           onTap: () async {
@@ -254,6 +317,59 @@ class _CallScreenState extends ConsumerState<CallScreen>
         );
       },
     );
+  }
+
+  void _showCallSettings() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => CallSettingsSheet(
+        isDubbingEnabled: _isDubbingEnabled,
+        targetLanguage: _targetLanguage,
+        onApply: (enabled, language) async {
+          final callService = ref.read(callServiceProvider);
+          
+          // Update settings
+          callService.setDubbingEnabled(enabled);
+          callService.setTargetLanguage(language);
+          
+          // Apply (reconnect with new settings)
+          await callService.applyDubbingSettings();
+          
+          // Show snackbar
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  enabled
+                      ? 'Translation enabled: ${_getLanguageName(language)}'
+                      : 'Translation disabled',
+                ),
+                duration: const Duration(seconds: 2),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        },
+      ),
+    );
+  }
+
+  String _getLanguageName(String code) {
+    const languages = {
+      'en': 'English',
+      'es': 'Spanish',
+      'fr': 'French',
+      'de': 'German',
+      'hi': 'Hindi',
+      'zh': 'Chinese',
+      'ja': 'Japanese',
+      'ko': 'Korean',
+      'ru': 'Russian',
+      'pt': 'Portuguese',
+    };
+    return languages[code] ?? code.toUpperCase();
   }
 }
 

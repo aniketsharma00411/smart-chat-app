@@ -16,8 +16,13 @@ class CallServiceWebSocket implements CallService {
 
   final _isConnectedController = StreamController<bool>.broadcast();
   final _isMicOnController = StreamController<bool>.broadcast();
+  final _isDubbingEnabledController = StreamController<bool>.broadcast();
+  final _targetLanguageController = StreamController<String>.broadcast();
 
   bool _isMicMuted = false;
+  bool _isDubbingEnabled = false;
+  String _targetLanguage = 'es'; // Default to Spanish
+  String? _currentCallId;
 
   // Configuration
   late final String _baseUrl = ApiConfig.socketUrl;
@@ -27,6 +32,12 @@ class CallServiceWebSocket implements CallService {
 
   @override
   Stream<bool> get isMicOn => _isMicOnController.stream;
+
+  @override
+  Stream<bool> get isDubbingEnabled => _isDubbingEnabledController.stream;
+
+  @override
+  Stream<String> get targetLanguage => _targetLanguageController.stream;
 
   @override
   Future<void> init() async {
@@ -57,8 +68,15 @@ class CallServiceWebSocket implements CallService {
   Future<void> joinCall(String callId) async {
     if (_channel != null) return;
 
+    _currentCallId = callId;
+
     try {
-      final uri = Uri.parse("$_baseUrl/$callId");
+      // Build URL with optional target_lang query parameter
+      String url = "$_baseUrl/$callId";
+      if (_isDubbingEnabled) {
+        url += "?target_lang=$_targetLanguage";
+      }
+      final uri = Uri.parse(url);
       debugPrint("🔌 Connecting to WebSocket: $uri (Base: $_baseUrl)");
       _channel = WebSocketChannel.connect(uri);
 
@@ -216,6 +234,58 @@ class CallServiceWebSocket implements CallService {
     debugPrint("🎤 Mic ${_isMicMuted ? 'MUTED' : 'UNMUTED'}");
   }
 
+  @override
+  void setDubbingEnabled(bool enabled) {
+    _isDubbingEnabled = enabled;
+    _isDubbingEnabledController.add(enabled);
+    debugPrint("🌎 Dubbing ${enabled ? 'ENABLED' : 'DISABLED'}");
+  }
+
+  @override
+  void setTargetLanguage(String languageCode) {
+    _targetLanguage = languageCode;
+    _targetLanguageController.add(languageCode);
+    debugPrint("🌎 Target Language: $languageCode");
+  }
+
+  @override
+  Future<void> applyDubbingSettings() async {
+    if (_currentCallId == null) {
+      debugPrint("⚠️ Cannot apply dubbing settings: No active call");
+      return;
+    }
+
+    debugPrint("🔄 Reconnecting with new dubbing settings...");
+    
+    // Store current mic state
+    final wasMuted = _isMicMuted;
+    
+    // End current call (this will cleanup and nullify modules)
+    await endCall();
+    
+    // Small delay to ensure clean disconnect
+    await Future.delayed(const Duration(milliseconds: 200));
+    
+    // Re-initialize audio modules
+    debugPrint("🔄 Re-initializing audio modules...");
+    _recorderModule = FlutterSoundRecorder();
+    _playerModule = FlutterSoundPlayer();
+    
+    await _recorderModule!.openRecorder();
+    await _playerModule!.openPlayer();
+    debugPrint("✅ Audio modules re-initialized");
+    
+    // Rejoin with new settings
+    await joinCall(_currentCallId!);
+    
+    // Restore mic state
+    if (wasMuted != _isMicMuted) {
+      toggleMic();
+    }
+    
+    debugPrint("✅ Reconnected with dubbing settings applied");
+  }
+
   // DEBUG: Generate 1 second of 440Hz Sine Wave at correct sample rate
   void _playTestTone() async {
     debugPrint("🎵 Generating Test Tone (440Hz)...");
@@ -294,5 +364,7 @@ class CallServiceWebSocket implements CallService {
     _cleanup();
     _isConnectedController.close();
     _isMicOnController.close();
+    _isDubbingEnabledController.close();
+    _targetLanguageController.close();
   }
 }

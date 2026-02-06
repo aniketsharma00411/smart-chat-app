@@ -13,7 +13,14 @@ abstract class CallService {
 
   void dispose();
 
+  // Dubbing controls
+  void setDubbingEnabled(bool enabled);
+  void setTargetLanguage(String languageCode);
+  Future<void> applyDubbingSettings();
+
   // Streams for UI
   Stream<bool> get isConnected;
   Stream<bool> get isMicOn;
+  Stream<bool> get isDubbingEnabled;
+  Stream<String> get targetLanguage;
 }
