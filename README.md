@@ -70,3 +70,31 @@ A modern messaging application built with Flutter and Firebase, featuring real-t
 
 *   **Missing User ID**: If your Share ID doesn't appear in the side menu, refresh the app. The app attempts to self-repair missing IDs on reload.
 *   **Firebase Errors**: Ensure your `firebase_options.dart` or `google-services.json` matches the package name/bundle ID of the app.
+
+# Reverse Proxy
+
+1. Install Caddy
+ ```brew install caddy```
+
+3. Run your servers:
+
+Flutter web server on 8000
+
+1. Build release web
+    ```flutter build web --release```
+
+2. 
+    ```cd buils/web```
+    ```python3 -m http.server 8000 --bind 0.0.0.0``
+
+Backend server on 8080
+```/Users/aniketsharma00411/Documents/Git/smart-chat-app/.venv/bin/python /Users/aniketsharma00411/Documents/Git/smart-chat-app/backend/main.py```
+
+4. Start caddy:
+```caddy run --config Caddyfile```
+
+5. Tunnel only candy
+```ngrok http 9000```
+
+# TO run the app in phone
+

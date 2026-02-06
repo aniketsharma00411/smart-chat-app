@@ -1,0 +1,7 @@
+:9000
+
+# Proxy Flutter web dev server
+reverse_proxy /* 127.0.0.1:8000
+
+# Proxy WebSocket server
+reverse_proxy /ws/* 127.0.0.1:8080
