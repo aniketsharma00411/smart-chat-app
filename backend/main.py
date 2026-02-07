@@ -13,7 +13,8 @@ from google.genai import types
 from dotenv import load_dotenv
 
 # Google Cloud Imports
-from google.cloud import speech
+from google.cloud.speech_v2 import SpeechAsyncClient
+from google.cloud.speech_v2.types import cloud_speech
 from google.cloud import translate_v2 as translate
 from google.cloud import texttospeech
 
@@ -37,25 +38,17 @@ async def lifespan(app: FastAPI):
     global speech_client, translate_client, tts_client
     try:
         # Initialize Google Cloud Clients
-        speech_client = speech.SpeechAsyncClient()
+        speech_client = SpeechAsyncClient()
         translate_client = translate.Client()
         tts_client = texttospeech.TextToSpeechAsyncClient()
-        logger.info("✅ Google Cloud Clients initialized successfully.")
+        logger.info("✅ Google Cloud Clients (V2) initialized successfully.")
 
-        # Connection Test
-        try:
-            logger.info("🧪 Testing Google Speech API Connection...")
-            config = speech.RecognitionConfig(
-                encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
-                sample_rate_hertz=16000,
-                language_code="en-US",
-            )
-            # Send a tiny bit of silence or dummy audio
-            dummy_audio = speech.RecognitionAudio(content=b'\0' * 3200)
-            await speech_client.recognize(config=config, audio=dummy_audio)
-            logger.info("✅ Google Speech API Connection Verified.")
-        except Exception as e:
-            logger.error(f"❌ Google Speech API Connection Failed: {e}")
+        # Verify project ID is set
+        if not GOOGLE_PROJECT_ID:
+            logger.error("❌ GOOGLE_PROJECT_ID not set in environment")
+        else:
+            logger.info(
+                f"✅ Using project: {GOOGLE_PROJECT_ID}, location: {GOOGLE_CLOUD_LOCATION}")
 
     except Exception as e:
         logger.error(f"Failed to initialize Google Cloud Clients: {e}")
@@ -81,7 +74,9 @@ app.add_middleware(
 # Configuration
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "gemini-3-flash-preview")
-GOOGLE_PROJECT_ID = os.getenv("GOOGLE_PROJECT_ID")  # Needed for some clients
+GOOGLE_PROJECT_ID = os.getenv("GOOGLE_PROJECT_ID")  # Required for Speech V2
+GOOGLE_CLOUD_LOCATION = os.getenv(
+    "GOOGLE_CLOUD_LOCATION", "global")  # Location for Speech V2
 
 if not GEMINI_API_KEY:
     logger.warning("WARNING: GEMINI_API_KEY not set. AI features will fail.")
@@ -93,10 +88,7 @@ def get_gemini_client():
     if not GEMINI_API_KEY:
         raise HTTPException(
             status_code=500, detail="Server misconfigured: Missing API Key")
-    return genai.Client(
-        api_key=GEMINI_API_KEY,
-        http_options={"api_version": "v1beta"}
-    )
+    return genai.Client(api_key=GEMINI_API_KEY)
 
 
 class ToneRequest(BaseModel):
@@ -405,12 +397,12 @@ async def websocket_endpoint(websocket: WebSocket, call_id: str, target_lang: st
                     # ECHO OFF: Exclude sender so they don't hear themselves
                     await manager.broadcast_bytes(audio_bytes, call_id, exclude=websocket)
 
-                # 2. Feed to Translation Loop (Gemini Live)
+                # 2. Feed to Translation Loop (Speech V2)
                 if translation_enabled:
-                    # Start Gemini Live translation task on first audio
+                    # Start translation task on first audio
                     if process_task is None:
                         logger.info(
-                            "🎤 Starting Gemini Live translation...")
+                            "🎤 Starting live translation (Speech V2 + TTS)...")
                         process_task = asyncio.create_task(
                             run_gemini_live_translation(
                                 call_id, target_lang, audio_input_queue, audio_output_queue
@@ -422,7 +414,7 @@ async def websocket_endpoint(websocket: WebSocket, call_id: str, target_lang: st
                                 websocket, call_id, audio_output_queue)
                         )
 
-                    # Send audio to Gemini Live
+                    # Send audio to translation pipeline
                     audio_input_queue.put_nowait(audio_bytes)
 
             elif "text" in data and data["text"]:
@@ -454,118 +446,267 @@ LANGUAGE_NAMES = {
     'pt': 'Portuguese',
 }
 
+# Language code to TTS voice name mapping (with region codes)
+TTS_VOICES = {
+    'en': 'en-US-Standard-A',
+    'es': 'es-ES-Standard-A',
+    'fr': 'fr-FR-Standard-A',
+    'de': 'de-DE-Standard-A',
+    'hi': 'hi-IN-Standard-A',
+    'zh': 'zh-CN-Standard-A',
+    'ja': 'ja-JP-Standard-A',
+    'ko': 'ko-KR-Standard-A',
+    'ru': 'ru-RU-Standard-A',
+    'pt': 'pt-BR-Standard-A',
+}
+
 
 async def run_gemini_live_translation(call_id: str, target_lang: str, audio_input_queue: asyncio.Queue, audio_output_queue: asyncio.Queue):
     """
-    Uses Gemini Live API for real-time speech-to-speech translation.
-    Audio In -> Gemini Live -> Translated Audio Out
+    Uses streaming STT + Gemini text translation + TTS for true live translation.
+    All tasks run in parallel: audio feeding, STT processing, translation, and TTS.
     """
+    if not speech_client or not tts_client:
+        logger.error("❌ Google Cloud clients not initialized")
+        return
+
     target_language_name = LANGUAGE_NAMES.get(target_lang, target_lang.upper())
-
-    system_instruction = f"""You are a real-time translator. Listen to the user and immediately translate their speech to {target_language_name}. Respond with the translation as soon as you detect speech has ended."""
-
     client = get_gemini_client()
-    model = "gemini-2.5-flash-native-audio-preview-12-2025"
 
-    config = types.LiveConnectConfig(
-        response_modalities=["AUDIO"],
-        system_instruction=types.Content(
-            parts=[types.Part(text=system_instruction)]
+    logger.info(
+        f"🌐 Starting Speech V2 translation pipeline for {target_language_name}")
+
+    # Queue for STT results to be processed
+    transcript_queue = asyncio.Queue()
+
+    # Configure streaming speech recognition (V2)
+    recognition_config = cloud_speech.RecognitionConfig(
+        explicit_decoding_config=cloud_speech.ExplicitDecodingConfig(
+            encoding=cloud_speech.ExplicitDecodingConfig.AudioEncoding.LINEAR16,
+            sample_rate_hertz=16000,
+            audio_channel_count=1,
         ),
-        speech_config=types.SpeechConfig(
-            voice_config=types.VoiceConfig(
-                prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                    voice_name="Kore"
-                )
-            )
-        )
+        language_codes=["en-US"],
+        model="long",  # Better for natural conversation
+        features=cloud_speech.RecognitionFeatures(
+            enable_automatic_punctuation=True,
+        ),
     )
 
-    try:
-        logger.info(
-            f"🤖 Connecting to Gemini Live API for {target_language_name} translation...")
-        logger.info(
-            f"🎙️ VAD will automatically detect speech and trigger translation")
+    streaming_config = cloud_speech.StreamingRecognitionConfig(
+        config=recognition_config,
+        streaming_features=cloud_speech.StreamingRecognitionFeatures(
+            interim_results=True,
+        ),
+    )
 
-        async with client.aio.live.connect(model=model, config=config) as session:
-            logger.info("✅ Gemini Live session started")
+    # V2 recognizer path
+    recognizer = f"projects/{GOOGLE_PROJECT_ID}/locations/{GOOGLE_CLOUD_LOCATION}/recognizers/_"
 
-            # Task to send audio to Gemini using realtime_input
-            async def send_audio():
-                chunk_count = 0
-                while True:
-                    audio_bytes = await audio_input_queue.get()
-                    if audio_bytes is None:
-                        logger.info("🛑 Audio input stream ended")
-                        break
+    logger.info(f"✅ Using recognizer: {recognizer}")
+    logger.info(f"✅ Audio format: 16kHz LINEAR16 mono")
 
-                    chunk_count += 1
+    # Task 1: Feed audio from input queue to STT stream
+    async def audio_feeder(requests_queue: asyncio.Queue):
+        """Feeds audio chunks to the STT request queue"""
+        chunk_count = 0
+        try:
+            while True:
+                chunk = await audio_input_queue.get()
+                if chunk is None:
+                    await requests_queue.put(None)
+                    break
 
-                    try:
-                        # Send audio chunk to Gemini (VAD will detect speech and respond)
-                        await session.send(
-                            input={"data": audio_bytes,
-                                   "mime_type": "audio/pcm"}
-                        )
-                    except Exception as e:
-                        logger.error(f"❌ Error sending audio: {e}")
-                        break
+                chunk_count += 1
+                if chunk_count == 1:
+                    logger.info(
+                        f"🔊 Audio streaming started (chunk size: {len(chunk)} bytes)")
+                elif chunk_count % 100 == 0:
+                    logger.debug(f"📊 Streamed {chunk_count} chunks")
 
-                    if chunk_count % 100 == 0:
-                        logger.info(
-                            f"🎵 Sent {chunk_count} audio chunks (VAD active)")
+                await requests_queue.put(cloud_speech.StreamingRecognizeRequest(audio=chunk))
+        except Exception as e:
+            logger.error(f"❌ Audio feeder error: {e}")
 
-            # Task to receive translated audio from Gemini
-            async def receive_audio():
-                response_count = 0
-                logger.info("👂 Starting to listen for Gemini responses...")
+    # Task 2: Process STT results and queue for translation (V2 API)
+    async def stt_processor(requests_queue: asyncio.Queue):
+        """Runs STT stream and queues transcripts for translation"""
+        recognition_count = 0
+
+        while True:
+            try:
+                async def request_generator():
+                    # First request with config and recognizer
+                    yield cloud_speech.StreamingRecognizeRequest(
+                        recognizer=recognizer,
+                        streaming_config=streaming_config,
+                    )
+
+                    # Then audio content
+                    while True:
+                        req = await requests_queue.get()
+                        if req is None:
+                            return
+                        yield req
+
+                logger.debug(f"📡 Starting STT stream #{recognition_count + 1}")
+                response_stream = await speech_client.streaming_recognize(
+                    requests=request_generator())
+
+                async for response in response_stream:
+                    for result in response.results:
+                        if not result.alternatives:
+                            continue
+
+                        transcript = result.alternatives[0].transcript.strip()
+                        is_final = result.is_final
+
+                        if transcript:
+                            recognition_count += 1
+                            logger.info(
+                                f"🎤 {'[FINAL]' if is_final else '[INTERIM]'} '{transcript}'")
+                            await transcript_queue.put((transcript, is_final))
+
+                # Stream ended naturally (user stopped speaking) - this is normal
+                logger.debug("🔄 STT stream ended, ready for next utterance")
+                await asyncio.sleep(0.1)
+
+            except Exception as e:
+                error_str = str(e)
+                # Timeout is normal when users pause - not an error!
+                if "timed out" in error_str.lower() or "OutOfRange" in error_str:
+                    logger.debug("💤 No audio received, stream closed (normal)")
+                    await asyncio.sleep(0.5)
+                    continue
+                elif "INVALID_ARGUMENT" in error_str:
+                    logger.error(f"❌ Invalid audio format or config: {e}")
+                    await asyncio.sleep(2)
+                    continue
+                else:
+                    logger.warning(f"⚠️ STT issue: {e}")
+                    await asyncio.sleep(1)
+                    continue
+
+    # Task 3: Translate with timeout handling for missing finals
+    async def translator():
+        """Processes transcripts, translates, and generates speech"""
+        translated_sentences = set()
+        last_transcript = ""
+        FINAL_TIMEOUT = 3.0  # Treat as final after this many seconds of no updates
+
+        async def process_translation(text: str, sentence_id: str):
+            """Actually do the translation and TTS"""
+            if sentence_id in translated_sentences:
+                return
+
+            translated_sentences.add(sentence_id)
+
+            try:
+                prompt = f"Translate this text directly to {target_language_name} (only output the translation, no explanations):\n\n{text}"
+                translation_response = client.models.generate_content(
+                    model=GEMINI_MODEL_NAME,
+                    contents=prompt,
+                )
+                translated_text = translation_response.text.strip()
+                logger.info(f"🌍 '{text}' → '{translated_text}'")
+
+                synthesis_input = texttospeech.SynthesisInput(
+                    text=translated_text)
+                voice_name = TTS_VOICES.get(
+                    target_lang, f"{target_lang}-Standard-A")
+                voice = texttospeech.VoiceSelectionParams(
+                    language_code=target_lang,
+                    name=voice_name
+                )
+                audio_config = texttospeech.AudioConfig(
+                    audio_encoding=texttospeech.AudioEncoding.LINEAR16,
+                    sample_rate_hertz=16000,
+                )
+
+                tts_response = await tts_client.synthesize_speech(
+                    input=synthesis_input,
+                    voice=voice,
+                    audio_config=audio_config
+                )
+
+                audio_output_queue.put_nowait(tts_response.audio_content)
+                logger.info(
+                    f"🔊 Queued {len(tts_response.audio_content)} bytes")
+
+            except Exception as e:
+                logger.error(f"❌ Translation/TTS error: {e}")
+
+        def extract_complete_sentences(text: str):
+            import re
+            sentence_endings = r'[.!?]'
+            sentences = []
+            parts = re.split(f'({sentence_endings})', text)
+
+            current_sentence = ""
+            for part in parts:
+                current_sentence += part
+                if re.match(sentence_endings, part) and current_sentence.strip():
+                    sentences.append(current_sentence.strip())
+                    current_sentence = ""
+
+            return sentences, current_sentence.strip()
+
+        try:
+            while True:
                 try:
-                    while True:  # Keep receiving indefinitely
-                        turn = session.receive()
-                        async for response in turn:
-                            # Check for audio data directly
-                            if response.data:
-                                response_count += 1
-                                translated_audio = response.data
-                                logger.info(
-                                    f"✅ Got translated audio chunk: {len(translated_audio)} bytes")
+                    transcript, is_final = await asyncio.wait_for(
+                        transcript_queue.get(),
+                        timeout=FINAL_TIMEOUT
+                    )
 
-                                # Put translated audio in output queue
-                                audio_output_queue.put_nowait(translated_audio)
+                    last_transcript = transcript
+                    complete_sentences, remaining = extract_complete_sentences(
+                        transcript)
 
-                                if response_count % 10 == 0:
-                                    logger.info(
-                                        f"🔊 Received {response_count} translated audio responses")
+                    translation_tasks = []
+                    for sentence in complete_sentences:
+                        sentence_id = sentence.strip()
+                        if len(sentence_id) > 2 and sentence_id not in translated_sentences:
+                            logger.info(
+                                f"📝 {'[FINAL]' if is_final else '[INTERIM]'} '{sentence_id}'")
+                            translation_tasks.append(asyncio.create_task(
+                                process_translation(sentence_id, sentence_id)))
 
-                            # Log text responses if any
-                            if response.text:
-                                logger.info(
-                                    f"📝 Text response: {response.text}")
+                    if is_final and remaining and len(remaining) > 2 and remaining not in translated_sentences:
+                        logger.info(f"📝 [FINAL no punct] '{remaining}'")
+                        translation_tasks.append(asyncio.create_task(
+                            process_translation(remaining, remaining)))
 
-                        # After turn completes, empty queue for interruptions
+                    if translation_tasks:
+                        await asyncio.gather(*translation_tasks, return_exceptions=True)
+
+                except asyncio.TimeoutError:
+                    # No new transcript for FINAL_TIMEOUT seconds - user likely finished speaking
+                    if last_transcript and last_transcript not in translated_sentences and len(last_transcript) > 2:
                         logger.info(
-                            "🔄 Turn complete, clearing queue for next turn")
-                        while not audio_output_queue.empty():
-                            audio_output_queue.get_nowait()
+                            f"💬 Speaking paused → translating: '{last_transcript}'")
+                        await process_translation(last_transcript, last_transcript)
+                        last_transcript = ""
 
-                except Exception as e:
-                    logger.error(f"❌ Error in receive loop: {e}")
-                    import traceback
-                    logger.error(traceback.format_exc())
-                finally:
-                    logger.info("🔚 Receive loop ended")
+        except Exception as e:
+            logger.error(f"❌ Translator error: {e}")
 
-            # Run send and receive tasks concurrently
-            await asyncio.gather(
-                send_audio(),
-                receive_audio(),
-                return_exceptions=True
-            )
+    # Run all tasks concurrently
+    requests_queue = asyncio.Queue()
 
+    try:
+        await asyncio.gather(
+            audio_feeder(requests_queue),
+            stt_processor(requests_queue),
+            translator(),
+            return_exceptions=True
+        )
     except Exception as e:
-        logger.error(f"❌ Gemini Live translation failed: {e}")
+        logger.error(f"❌ Translation pipeline failed: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
     finally:
-        logger.info("🔌 Gemini Live session ended")
+        logger.info("🔌 Streaming translation ended")
 
 
 async def broadcast_translated_audio(websocket: WebSocket, call_id: str, audio_output_queue: asyncio.Queue):

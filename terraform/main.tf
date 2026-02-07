@@ -50,6 +50,26 @@ resource "google_project_service" "apikeys_api" {
   service            = "apikeys.googleapis.com"
   disable_on_destroy = false
 }
+
+# Speech, Translation, and TTS APIs
+resource "google_project_service" "speech_api" {
+  provider           = google-beta
+  service            = "speech.googleapis.com"
+  disable_on_destroy = false
+}
+
+resource "google_project_service" "texttospeech_api" {
+  provider           = google-beta
+  service            = "texttospeech.googleapis.com"
+  disable_on_destroy = false
+}
+
+resource "google_project_service" "translate_api" {
+  provider           = google-beta
+  service            = "translate.googleapis.com"
+  disable_on_destroy = false
+}
+
 resource "google_project_service" "cloudrun_api" {
   service            = "run.googleapis.com"
   disable_on_destroy = false
@@ -115,10 +135,27 @@ resource "google_cloud_run_v2_service" "gateway" {
         name  = "GEMINI_API_KEY"
         value = var.gemini_api_key
       }
+
+      # Google Cloud Project Configuration
+      env {
+        name  = "GOOGLE_PROJECT_ID"
+        value = var.project_id
+      }
+
+      env {
+        name  = "GOOGLE_CLOUD_LOCATION"
+        value = "global"
+      }
     }
   }
 
-  depends_on = [google_project_service.cloudrun_api, null_resource.docker_build]
+  depends_on = [
+    google_project_service.cloudrun_api,
+    google_project_service.speech_api,
+    google_project_service.texttospeech_api,
+    google_project_service.translate_api,
+    null_resource.docker_build
+  ]
 }
 
 # Allow unauthenticated invocations (public API for hackathon demo)
@@ -129,10 +166,6 @@ resource "google_cloud_run_service_iam_binding" "default" {
   members = [
     "allUsers"
   ]
-}
-
-output "service_url" {
-  value = google_cloud_run_v2_service.gateway.uri
 }
 
 # Firebase Resources
