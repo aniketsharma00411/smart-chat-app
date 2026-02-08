@@ -1,7 +1,8 @@
+import 'package:vayu/core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:smart_chat_app/core/providers/providers.dart';
+import 'package:vayu/core/providers/providers.dart';
 
 class ChatListScreen extends ConsumerStatefulWidget {
   const ChatListScreen({super.key});
@@ -14,6 +15,72 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
   bool _isSearching = false;
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = "";
+
+  String _selectedLanguage = 'en';
+  bool _isLoadingLanguage = false;
+
+  final Map<String, String> _languages = {
+    'en': 'English',
+    'es': 'Spanish',
+    'fr': 'French',
+    'de': 'German',
+    'hi': 'Hindi',
+    'zh': 'Chinese',
+    'ja': 'Japanese',
+    'ko': 'Korean',
+    'ru': 'Russian',
+    'pt': 'Portuguese',
+  };
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCurrentLanguage();
+  }
+
+  Future<void> _loadCurrentLanguage() async {
+    final user = ref.read(currentUserProvider).value;
+    if (user != null) {
+      final firestoreService = ref.read(firestoreServiceProvider);
+      final userDoc = await firestoreService.getUser(user.uid);
+      if (userDoc != null && userDoc.containsKey('preferredLanguage')) {
+        if (mounted) {
+          setState(() {
+            _selectedLanguage = userDoc['preferredLanguage'];
+          });
+        }
+      }
+    }
+  }
+
+  Future<void> _saveLanguage(String? newValue) async {
+    if (newValue == null) return;
+
+    setState(() {
+      _selectedLanguage = newValue;
+      _isLoadingLanguage = true;
+    });
+
+    try {
+      final user = ref.read(currentUserProvider).value;
+      if (user != null) {
+        final firestoreService = ref.read(firestoreServiceProvider);
+        await firestoreService.updateUserLanguage(user.uid, newValue);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error saving language: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingLanguage = false;
+        });
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -140,22 +207,79 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
             ? TextField(
                 controller: _searchController,
                 autofocus: true,
+                cursorColor: Colors.white,
                 decoration: const InputDecoration(
                   hintText: "Search contacts...",
                   border: InputBorder.none,
-                  hintStyle: TextStyle(color: Colors.grey),
+                  hintStyle: TextStyle(color: Colors.white70),
                 ),
-                style: const TextStyle(color: Colors.black),
+                style: const TextStyle(color: Colors.white),
                 onChanged: (value) =>
                     setState(() => _searchQuery = value.toLowerCase()),
               )
-            : const Text('Contacts'),
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Image.asset(
+                    'assets/branding/app_icon.png',
+                    height: 48, // Increased size
+                    width: 48,
+                    errorBuilder: (context, error, stackTrace) =>
+                        const Icon(Icons.error, color: Colors.white),
+                  ),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(20),
+                        border:
+                            Border.all(color: Colors.white.withOpacity(0.3)),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: _selectedLanguage,
+                          isExpanded: false,
+                          isDense: true,
+                          dropdownColor: AppTheme.primaryBrand,
+                          icon: _isLoadingLanguage
+                              ? const SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2, color: Colors.white))
+                              : const Icon(Icons.keyboard_arrow_down,
+                                  color: Colors.white, size: 20),
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500),
+                          items: _languages.entries.map((entry) {
+                            return DropdownMenuItem<String>(
+                              value: entry.key,
+                              child: Text(
+                                entry.value.split(' ')[0],
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            );
+                          }).toList(),
+                          onChanged: _isLoadingLanguage ? null : _saveLanguage,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
         elevation: 0,
-        backgroundColor: Colors.white,
-        foregroundColor: const Color(0xFF1E293B),
+        backgroundColor: AppTheme.primaryBrand,
+        foregroundColor: Colors.white,
+        iconTheme: const IconThemeData(color: Colors.white),
         actions: [
           IconButton(
-              icon: Icon(_isSearching ? Icons.close : Icons.search),
+              icon: Icon(_isSearching ? Icons.close : Icons.search,
+                  color: Colors.white),
               tooltip: _isSearching ? "Close Search" : "Search Contacts",
               onPressed: () {
                 setState(() {
@@ -168,6 +292,13 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
                   }
                 });
               }),
+          IconButton(
+            icon: const Icon(Icons.settings_outlined),
+            tooltip: "Settings",
+            onPressed: () {
+              context.push('/settings');
+            },
+          ),
           const SizedBox(width: 8),
         ],
       ),
@@ -177,7 +308,7 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
             UserAccountsDrawerHeader(
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
-                    colors: [Color(0xFF4338CA), Color(0xFF6366F1)]),
+                    colors: [AppTheme.primaryBrand, AppTheme.primaryAccent]),
               ),
               accountName: Text(user?.displayName ?? "Demo User",
                   style: const TextStyle(fontWeight: FontWeight.bold)),
@@ -204,14 +335,6 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
               onTap: () {
                 Navigator.pop(context); // Close drawer
                 _showAddContactDialog();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.settings_outlined),
-              title: const Text("Settings"),
-              onTap: () {
-                Navigator.pop(context); // Close drawer
-                context.push('/settings');
               },
             ),
             const Spacer(),
@@ -332,7 +455,7 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
             ),
       floatingActionButton: FloatingActionButton(
         onPressed: _showAddContactDialog,
-        child: const Icon(Icons.message),
+        child: const Icon(Icons.person_add),
       ),
     );
   }

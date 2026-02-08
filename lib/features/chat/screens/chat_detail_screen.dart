@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:smart_chat_app/core/providers/providers.dart';
-import 'package:smart_chat_app/features/chat/screens/rewrite_message_screen.dart';
-import 'package:smart_chat_app/features/chat/models/message.dart';
+import 'package:vayu/core/providers/providers.dart';
+import 'package:vayu/features/chat/screens/rewrite_message_screen.dart';
+import 'package:vayu/features/chat/models/message.dart';
+import 'package:vayu/core/theme/app_theme.dart';
 
 class ChatDetailScreen extends ConsumerStatefulWidget {
   final String chatId;
@@ -128,14 +129,10 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(80),
+        preferredSize: const Size.fromHeight(92),
         child: Container(
           decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Color(0xFF4338CA), Color(0xFF6366F1)],
-              begin: Alignment.centerLeft,
-              end: Alignment.centerRight,
-            ),
+            color: AppTheme.primaryBrand,
           ),
           child: SafeArea(
             child: Row(
@@ -217,7 +214,7 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
 
                                 return IconButton(
                                   icon: const Icon(Icons.phone,
-                                      color: Colors.greenAccent),
+                                      color: Colors.white, size: 28),
                                   onPressed: () async {
                                     final firestore =
                                         ref.read(firestoreServiceProvider);
@@ -348,8 +345,8 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
                                     decoration: BoxDecoration(
                                       gradient: isMe
                                           ? const LinearGradient(colors: [
-                                              Color(0xFF4338CA),
-                                              Color(0xFF6366F1)
+                                              AppTheme.primaryBrand,
+                                              AppTheme.primaryAccent,
                                             ])
                                           : null,
                                       color: isMe ? null : Colors.white,
@@ -496,13 +493,13 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
                                           children: [
                                             const Icon(Icons.auto_awesome,
                                                 size: 14,
-                                                color: Color(0xFF4338CA)),
+                                                color: AppTheme.primaryBrand),
                                             const SizedBox(width: 6),
                                             Text(toneReason,
                                                 style: const TextStyle(
                                                   fontSize: 12,
                                                   fontWeight: FontWeight.w600,
-                                                  color: Color(0xFF4338CA),
+                                                  color: AppTheme.primaryBrand,
                                                   letterSpacing: 0.3,
                                                 )),
                                           ],
@@ -585,7 +582,7 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
                   GestureDetector(
                     onTap: _sendMessage,
                     child: const CircleAvatar(
-                      backgroundColor: Color(0xFF4338CA),
+                      backgroundColor: AppTheme.primaryBrand,
                       radius: 24,
                       child: Icon(Icons.send, color: Colors.white, size: 20),
                     ),
@@ -671,7 +668,7 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
           child: Row(
             children: [
               Icon(Icons.psychology_outlined,
-                  size: 20, color: Color(0xFF4338CA)),
+                  size: 20, color: AppTheme.primaryBrand),
               SizedBox(width: 12),
               Text('Analyze Tone'),
             ],

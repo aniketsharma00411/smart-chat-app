@@ -3,19 +3,20 @@ import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
   // Brand Colors - Professional & Vibrant
-  static const Color primaryBrand = Color(0xFF4338CA); // Indigo 700
-  static const Color primaryAccent = Color(0xFF6366F1); // Indigo 500
-  static const Color secondaryAccent = Color(0xFF06B6D4); // Cyan 500
-  
+  // Brand Colors - Professional & Vibrant (Vayu Blue)
+  static const Color primaryBrand = Color(0xFF0175C2); // Vayu Blue
+  static const Color primaryAccent = Color(0xFF039BE5); // Light Blue
+  static const Color secondaryAccent = Color(0xFF26C6DA); // Cyan/Teal
+
   // Backgrounds
   static const Color backgroundLight = Color(0xFFF8FAFC); // Slate 50
   static const Color surfaceWhite = Colors.white;
   static const Color surfaceGlass = Color(0xCCFFFFFF);
-  
+
   // Text
   static const Color textPrimary = Color(0xFF1E293B); // Slate 800
   static const Color textSecondary = Color(0xFF64748B); // Slate 500
-  
+
   // Status
   static const Color success = Color(0xFF10B981); // Emerald 500
   static const Color warning = Color(0xFFF59E0B); // Amber 500
@@ -35,8 +36,12 @@ class AppTheme {
       ),
       scaffoldBackgroundColor: backgroundLight,
       textTheme: GoogleFonts.interTextTheme().copyWith(
-        displayLarge: const TextStyle(fontWeight: FontWeight.bold, color: textPrimary, letterSpacing: -1.0),
-        titleLarge: const TextStyle(fontWeight: FontWeight.w700, color: textPrimary),
+        displayLarge: const TextStyle(
+            fontWeight: FontWeight.bold,
+            color: textPrimary,
+            letterSpacing: -1.0),
+        titleLarge:
+            const TextStyle(fontWeight: FontWeight.w700, color: textPrimary),
         bodyLarge: const TextStyle(color: textPrimary, fontSize: 16),
         bodyMedium: const TextStyle(color: textSecondary, fontSize: 14),
       ),
@@ -45,7 +50,8 @@ class AppTheme {
         foregroundColor: textPrimary,
         elevation: 0,
         centerTitle: false,
-        titleTextStyle: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: textPrimary),
+        titleTextStyle: TextStyle(
+            fontSize: 20, fontWeight: FontWeight.bold, color: textPrimary),
         iconTheme: IconThemeData(color: textPrimary),
         scrolledUnderElevation: 2,
         shadowColor: Color(0x1A000000),
@@ -56,7 +62,8 @@ class AppTheme {
           foregroundColor: Colors.white,
           elevation: 2,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
         ),
       ),
@@ -68,14 +75,15 @@ class AppTheme {
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-           borderRadius: BorderRadius.circular(12),
-           borderSide: BorderSide.none,
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: primaryAccent, width: 1.5),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       ),
       cardTheme: CardThemeData(
         color: surfaceWhite,

@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:smart_chat_app/core/services/auth_service.dart';
-import 'package:smart_chat_app/features/splash/screens/splash_screen.dart';
+import 'package:vayu/core/services/auth_service.dart';
+import 'package:vayu/features/splash/screens/splash_screen.dart';
 import '../../features/auth/screens/login_screen.dart';
 import '../../features/chat/screens/chat_list_screen.dart';
 import '../../features/chat/screens/chat_detail_screen.dart';
 import '../../features/call/screens/call_screen.dart';
-import 'package:smart_chat_app/features/ai_assistant/screens/ai_chat_screen.dart';
+import 'package:vayu/features/ai_assistant/screens/ai_chat_screen.dart';
 import '../../features/settings/screens/settings_screen.dart';
 
 final authProvider = StreamProvider((ref) => AuthService().authStateChanges);

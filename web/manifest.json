@@ -1,6 +1,6 @@
 {
-    "name": "smart_chat_app",
-    "short_name": "smart_chat_app",
+    "name": "Vayu",
+    "short_name": "Vayu",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

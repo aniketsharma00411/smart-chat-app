@@ -26,7 +26,7 @@ load_dotenv(dotenv_path=Path(__file__).parent.parent / '.env')
 
 # Logger setup
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("SmartChatBackend")
+logger = logging.getLogger("VayuBackend")
 
 # --- Clients Initialization (Lazy or Global) ---
 speech_client = None
@@ -67,7 +67,7 @@ async def lifespan(app: FastAPI):
     # Shutdown (cleanup if needed)
     logger.info("👋 Shutting down...")
 
-app = FastAPI(title="Smart Chat Gateway API", lifespan=lifespan)
+app = FastAPI(title="Vayu Gateway API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

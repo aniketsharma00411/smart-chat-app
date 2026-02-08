@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:smart_chat_app/core/router/app_router.dart';
+import 'package:vayu/core/router/app_router.dart';
 import '../../../core/providers/providers.dart';
 
 class CallOverlay extends ConsumerWidget {

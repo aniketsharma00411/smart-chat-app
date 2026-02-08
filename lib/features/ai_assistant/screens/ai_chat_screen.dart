@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:smart_chat_app/core/theme/app_theme.dart';
+import 'package:vayu/core/theme/app_theme.dart';
 import '../../../core/providers/providers.dart';
 
 class AIChatScreen extends ConsumerStatefulWidget {

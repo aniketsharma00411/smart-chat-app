@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:smart_chat_app/core/providers/providers.dart';
+import 'package:vayu/core/providers/providers.dart';
 
 class RewriteMessageScreen extends ConsumerStatefulWidget {
   final String originalText;

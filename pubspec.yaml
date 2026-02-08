@@ -1,5 +1,5 @@
-name: smart_chat_app
-description: A real-time communication copilot for multilingual teams.
+name: vayu
+description: Vayu uses Gemini 3 to bridge global teams with real-time translation and tone analysis.
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -30,9 +30,25 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.0
+  flutter_launcher_icons: ^0.13.1
+
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/branding/app_icon.png"
+  min_sdk_android: 21
+  web:
+    generate: true
+    image_path: "assets/branding/app_icon.png"
+    background_color: "#0175C2"
+    theme_color: "#0175C2"
+  macos:
+    generate: true
+    image_path: "assets/branding/app_icon.png"
 
 
 flutter:
   uses-material-design: true
   assets:
      - .env
+     - assets/branding/

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
-import 'package:smart_chat_app/core/services/auth_service.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:vayu/core/services/auth_service.dart';
+import 'package:vayu/core/theme/app_theme.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -58,7 +59,11 @@ class _LoginScreenState extends State<LoginScreen>
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFF4338CA), Color(0xFF6366F1), Color(0xFF06B6D4)],
+            colors: [
+              AppTheme.primaryBrand,
+              AppTheme.primaryAccent,
+              AppTheme.secondaryAccent
+            ],
           ),
         ),
         child: Center(
@@ -86,79 +91,71 @@ class _LoginScreenState extends State<LoginScreen>
                         ],
                       ),
                       child: Column(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: const BoxDecoration(
-                              color: Color(0xFFEEF2FF),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(Icons.chat_bubble,
-                                size: 48, color: Color(0xFF4338CA)),
-                          ),
                           const SizedBox(height: 24),
-                          Text(
-                            'Welcome Back',
-                            style: Theme.of(context)
-                                .textTheme
-                                .headlineMedium
-                                ?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                  color: const Color(0xFF1E293B),
-                                ),
+                          Image.asset(
+                            'assets/branding/app_icon.png',
+                            height: 100, // Increased size
+                            width: 100,
                           ),
-                          const SizedBox(height: 8),
+                          const SizedBox(height: 32), // More breathing room
                           Text(
-                            'Multilingual communication,\nreimagined for teams.',
+                            'Vayu',
+                            style: GoogleFonts.outfit(
+                              fontSize: 36,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFF1E293B), // Dark Slate
+                              letterSpacing: -0.5,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            'Bridge global teams with\nreal-time translation, tone\nanalysis, and deep reasoning.',
                             textAlign: TextAlign.center,
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyMedium
-                                ?.copyWith(
-                                  color: const Color(0xFF64748B),
-                                  height: 1.5,
-                                ),
+                            style: GoogleFonts.inter(
+                              fontSize: 16,
+                              color: const Color(0xFF64748B),
+                              height: 1.5,
+                            ),
                           ),
-                          const SizedBox(height: 40),
+                          const SizedBox(
+                              height: 48), // More spacing before button
                           if (_isLoading)
                             const CircularProgressIndicator()
                           else
-                            Column(
-                              children: [
-                                ElevatedButton(
-                                  onPressed: _handleGoogleSignIn,
-                                  style: ElevatedButton.styleFrom(
-                                    minimumSize:
-                                        const Size(double.infinity, 56),
-                                    shadowColor: const Color(0x4D4338CA),
-                                    elevation: 8,
-                                  ),
-                                  child: const Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      // In real app use Google Logo asset
-                                      Icon(Icons.login, size: 24),
-                                      SizedBox(width: 12),
-                                      Text("Sign in with Google"),
-                                    ],
-                                  ),
+                            ElevatedButton(
+                              onPressed: _handleGoogleSignIn,
+                              style: ElevatedButton.styleFrom(
+                                minimumSize: const Size(double.infinity, 56),
+                                shadowColor: AppTheme.primaryBrand
+                                    .withOpacity(0.25), // softer shadow
+                                elevation: 4,
+                                backgroundColor: AppTheme.primaryBrand,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
                                 ),
-                                const SizedBox(height: 16),
-                                TextButton(
-                                  onPressed: () => context.go('/chats'),
-                                  child: const Text("View UI Demo (Skip Login)",
-                                      style:
-                                          TextStyle(color: Color(0xFF64748B))),
-                                ),
-                              ],
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  // In real app use Google Logo asset
+                                  const Icon(Icons.login, size: 24),
+                                  const SizedBox(width: 12),
+                                  Text(
+                                    "Sign in with Google",
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
+                          const SizedBox(height: 24),
                         ],
                       ),
-                    ),
-                    const SizedBox(height: 24),
-                    const Text(
-                      "© 2026 Smart Chat App",
-                      style: TextStyle(color: Colors.white70, fontSize: 12),
                     ),
                   ],
                 ),

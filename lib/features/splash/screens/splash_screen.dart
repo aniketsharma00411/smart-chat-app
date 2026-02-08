@@ -16,10 +16,16 @@ class _SplashScreenState extends State<SplashScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
+    return Scaffold(
       body: Center(
-        child: Text("Smart Chat App",
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+        child: Text(
+          "Vayu",
+          style: TextStyle(
+            fontSize: 32,
+            fontWeight: FontWeight.bold,
+            color: Theme.of(context).primaryColor,
+          ),
+        ),
       ),
     );
   }

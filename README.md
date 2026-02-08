@@ -1,6 +1,6 @@
-# Smart Chat App
+# Vayu
 
-A modern messaging application built with Flutter and Firebase, featuring real-time chat, AI-powered tone analysis, and message translation.
+Vayu uses Gemini 3 to bridge global teams. It provides real-time translation, tone analysis, and deep context reasoning to ensure every message is understood exactly as intended.
 
 ## Features
 
