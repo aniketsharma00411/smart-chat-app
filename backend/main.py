@@ -17,6 +17,8 @@ from google.cloud.speech_v2 import SpeechAsyncClient
 from google.cloud.speech_v2.types import cloud_speech
 from google.cloud import translate_v2 as translate
 from google.cloud import texttospeech
+from google.api_core.client_options import ClientOptions
+from google.protobuf.duration_pb2 import Duration
 
 from pathlib import Path
 
@@ -38,7 +40,11 @@ async def lifespan(app: FastAPI):
     global speech_client, translate_client, tts_client
     try:
         # Initialize Google Cloud Clients
-        speech_client = SpeechAsyncClient()
+        speech_client = SpeechAsyncClient(
+            client_options=ClientOptions(
+                api_endpoint=f"{GOOGLE_CLOUD_LOCATION}-speech.googleapis.com"
+            )
+        )
         translate_client = translate.Client()
         tts_client = texttospeech.TextToSpeechAsyncClient()
         logger.info("✅ Google Cloud Clients (V2) initialized successfully.")
@@ -487,16 +493,13 @@ async def run_gemini_live_translation(call_id: str, target_lang: str, audio_inpu
             audio_channel_count=1,
         ),
         language_codes=["en-US"],
-        model="long",  # Better for natural conversation
-        features=cloud_speech.RecognitionFeatures(
-            enable_automatic_punctuation=True,
-        ),
+        model="chirp_3",
     )
 
     streaming_config = cloud_speech.StreamingRecognitionConfig(
         config=recognition_config,
         streaming_features=cloud_speech.StreamingRecognitionFeatures(
-            interim_results=True,
+            interim_results=True
         ),
     )
 
@@ -587,28 +590,51 @@ async def run_gemini_live_translation(call_id: str, target_lang: str, audio_inpu
                     await asyncio.sleep(1)
                     continue
 
-    # Task 3: Translate with timeout handling for missing finals
+    # Task 3: Real-time translator - processes every transcript immediately
     async def translator():
-        """Processes transcripts, translates, and generates speech"""
-        translated_sentences = set()
-        last_transcript = ""
-        FINAL_TIMEOUT = 3.0  # Treat as final after this many seconds of no updates
+        """Processes transcripts in real-time, like a simultaneous interpreter"""
+        from collections import deque
 
-        async def process_translation(text: str, sentence_id: str):
-            """Actually do the translation and TTS"""
-            if sentence_id in translated_sentences:
-                return
+        last_translated = ""  # Track what we last translated to avoid duplicates
+        # Keep last 25 translations for context
+        translation_history = deque(maxlen=25)
 
-            translated_sentences.add(sentence_id)
-
+        async def process_translation(text: str, is_final: bool):
+            """Translate and synthesize speech immediately"""
             try:
-                prompt = f"Translate this text directly to {target_language_name} (only output the translation, no explanations):\n\n{text}"
+                # Build context from previous translations
+                context = ""
+                if translation_history:
+                    context = "Previously translated:\n" + "\n".join(
+                        [f"- EN: {item['source']} → {target_lang.upper()}: {item['translated']}"
+                         # Last 20 for context
+                         for item in list(translation_history)[-20:]]
+                    ) + "\n\n"
+
+                prompt = f"""You are a professional real-time translator providing live interpretation.
+
+{context}Based on the translation history above, translate ONLY the new or changed content in the current text to {target_language_name}.
+If the text is identical or very similar to something already translated, return the previous translation.
+If there is new content, translate only that new part naturally.
+
+Current text to translate: "{text}"
+
+Return only the {target_language_name} translation, no explanations."""
+
                 translation_response = client.models.generate_content(
                     model=GEMINI_MODEL_NAME,
                     contents=prompt,
                 )
                 translated_text = translation_response.text.strip()
-                logger.info(f"🌍 '{text}' → '{translated_text}'")
+                logger.info(
+                    f"🌍 {'[FINAL]' if is_final else '[INTERIM]'} '{text}' → '{translated_text}'")
+
+                # Add to history
+                translation_history.append({
+                    'source': text,
+                    'translated': translated_text,
+                    'is_final': is_final
+                })
 
                 synthesis_input = texttospeech.SynthesisInput(
                     text=translated_text)
@@ -636,57 +662,32 @@ async def run_gemini_live_translation(call_id: str, target_lang: str, audio_inpu
             except Exception as e:
                 logger.error(f"❌ Translation/TTS error: {e}")
 
-        def extract_complete_sentences(text: str):
-            import re
-            sentence_endings = r'[.!?]'
-            sentences = []
-            parts = re.split(f'({sentence_endings})', text)
-
-            current_sentence = ""
-            for part in parts:
-                current_sentence += part
-                if re.match(sentence_endings, part) and current_sentence.strip():
-                    sentences.append(current_sentence.strip())
-                    current_sentence = ""
-
-            return sentences, current_sentence.strip()
-
         try:
             while True:
-                try:
-                    transcript, is_final = await asyncio.wait_for(
-                        transcript_queue.get(),
-                        timeout=FINAL_TIMEOUT
-                    )
+                transcript, is_final = await transcript_queue.get()
 
-                    last_transcript = transcript
-                    complete_sentences, remaining = extract_complete_sentences(
-                        transcript)
+                # Only translate if this is new/different text
+                if transcript == last_translated or len(transcript) < 3:
+                    continue
 
-                    translation_tasks = []
-                    for sentence in complete_sentences:
-                        sentence_id = sentence.strip()
-                        if len(sentence_id) > 2 and sentence_id not in translated_sentences:
-                            logger.info(
-                                f"📝 {'[FINAL]' if is_final else '[INTERIM]'} '{sentence_id}'")
-                            translation_tasks.append(asyncio.create_task(
-                                process_translation(sentence_id, sentence_id)))
+                # # Determine if we should translate
+                # should_translate = False
 
-                    if is_final and remaining and len(remaining) > 2 and remaining not in translated_sentences:
-                        logger.info(f"📝 [FINAL no punct] '{remaining}'")
-                        translation_tasks.append(asyncio.create_task(
-                            process_translation(remaining, remaining)))
+                # if is_final:
+                #     # Always translate final results
+                #     should_translate = True
+                # else:
+                #     # For interim results, check if significantly different
+                #     # Case 1: Completely new text (not an extension of previous)
+                #     if not transcript.startswith(last_translated[:min(10, len(last_translated))]):
+                #         should_translate = True
+                #     # Case 2: Extended by 5+ characters
+                #     elif len(transcript) > len(last_translated) + 5:
+                #         should_translate = True
 
-                    if translation_tasks:
-                        await asyncio.gather(*translation_tasks, return_exceptions=True)
-
-                except asyncio.TimeoutError:
-                    # No new transcript for FINAL_TIMEOUT seconds - user likely finished speaking
-                    if last_transcript and last_transcript not in translated_sentences and len(last_transcript) > 2:
-                        logger.info(
-                            f"💬 Speaking paused → translating: '{last_transcript}'")
-                        await process_translation(last_transcript, last_transcript)
-                        last_transcript = ""
+                # if should_translate:
+                last_translated = transcript
+                await process_translation(transcript, is_final)
 
         except Exception as e:
             logger.error(f"❌ Translator error: {e}")
