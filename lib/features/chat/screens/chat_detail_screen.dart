@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:vayu/core/providers/providers.dart';
 import 'package:vayu/features/chat/screens/rewrite_message_screen.dart';
+import 'package:vayu/features/chat/screens/explain_context_screen.dart';
 import 'package:vayu/features/chat/models/message.dart';
 import 'package:vayu/core/theme/app_theme.dart';
 
@@ -646,9 +647,14 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
               extra:
                   "Rewrite this message to be more professional: \"${msg.text}\"");
         } else if (value == 'explain') {
-          GoRouter.of(context).push('/ai-chat',
-              extra:
-                  "Explain the tone and context of this message: \"${msg.text}\"");
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => ExplainContextScreen(
+                targetMessage: msg,
+                chatId: widget.chatId,
+              ),
+            ),
+          );
         }
       },
       itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[

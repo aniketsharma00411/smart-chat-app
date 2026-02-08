@@ -106,12 +106,37 @@ class ApiService {
         final data = jsonDecode(response.body);
         return data['rewritten_text'];
       } else {
-        debugPrint(
-            "Rewrite API Error: ${response.statusCode} - ${response.body}");
         return null;
       }
     } catch (e) {
       debugPrint("Rewrite API Exception: $e");
+      return null;
+    }
+  }
+
+  Future<String?> explainContext(
+      String text, List<String> history, String? query) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$_baseUrl/explain-context'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'text': text,
+          'conversation_history': history,
+          if (query != null) 'query': query,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['explanation'];
+      } else {
+        debugPrint(
+            "Explain Context API Error: ${response.statusCode} - ${response.body}");
+        return null;
+      }
+    } catch (e) {
+      debugPrint("Explain Context API Exception: $e");
       return null;
     }
   }

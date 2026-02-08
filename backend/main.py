@@ -263,6 +263,16 @@ class RewriteResponse(BaseModel):
     rewritten_text: str
 
 
+class ExplainContextRequest(BaseModel):
+    text: str
+    conversation_history: List[str]
+    query: Optional[str] = None
+
+
+class ExplainContextResponse(BaseModel):
+    explanation: str
+
+
 @app.post("/api/rewrite", response_model=RewriteResponse)
 async def rewrite_message(request: RewriteRequest):
     client = get_gemini_client()
@@ -302,6 +312,47 @@ async def rewrite_message(request: RewriteRequest):
         return RewriteResponse(rewritten_text=result.get("rewritten_text", request.text))
     except Exception as e:
         logger.error(f"Rewrite Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/explain-context", response_model=ExplainContextResponse)
+async def explain_context(request: ExplainContextRequest):
+    client = get_gemini_client()
+    
+    history_text = "\n".join(request.conversation_history)
+    
+    user_query = request.query if request.query else "Explain the context of this message based on the conversation history."
+    
+    prompt = f"""
+    You are a helpful assistant.
+    
+    Conversation History:
+    {history_text}
+    
+    Target Message: "{request.text}"
+    
+    User Question: {user_query}
+    
+    Provide a clear and concise explanation or answer based ONLY on the provided history and message.
+    
+    Return JSON only:
+    {{
+        "explanation": "The explanation or answer"
+    }}
+    """
+    
+    try:
+        response = client.models.generate_content(
+            model=GEMINI_MODEL_NAME,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json"
+            )
+        )
+        result = json.loads(response.text)
+        return ExplainContextResponse(explanation=result.get("explanation", "Could not generate explanation."))
+    except Exception as e:
+        logger.error(f"Explain Context Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
