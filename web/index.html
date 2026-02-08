@@ -1,7 +1,8 @@
 <!DOCTYPE html>
 <html>
-<head>
-  <!--
+
+  <head>
+    <!--
     If you are serving your web app in a path other than the root, change the
     href value below to reflect the base path you are serving from.
 
@@ -14,25 +15,56 @@
     This is a placeholder for base href that will be replaced by the value of
     the `--base-href` argument provided to `flutter build`.
   -->
-  <base href="$FLUTTER_BASE_HREF">
+    <base href="$FLUTTER_BASE_HREF">
 
-  <meta charset="UTF-8">
-  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="Vayu - Global Team Bridge">
+    <meta charset="UTF-8">
+    <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+    <meta name="description" content="Vayu - Global Team Bridge">
 
-  <!-- iOS meta tags & icons -->
-  <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="Vayu">
-  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+    <!-- iOS meta tags & icons -->
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="apple-mobile-web-app-title" content="Vayu">
+    <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
-  <!-- Favicon -->
-  <link rel="icon" type="image/png" href="favicon.png"/>
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="favicon.png" />
 
-  <title>Vayu</title>
-  <link rel="manifest" href="manifest.json">
-</head>
-<body>
-  <script src="flutter_bootstrap.js" async></script>
-</body>
+    <title>Vayu</title>
+    <link rel="manifest" href="manifest.json">
+  </head>
+
+  <body>
+    <!-- Intercept getUserMedia to track MediaStreams -->
+    <script>
+      (function () {
+        const originalGetUserMedia = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+        window._activeMediaStreams = [];
+
+        navigator.mediaDevices.getUserMedia = function (constraints) {
+          console.log('🎤 getUserMedia called with:', constraints);
+          return originalGetUserMedia(constraints).then((stream) => {
+            console.log('✅ MediaStream obtained:', stream.id);
+            window._activeMediaStreams.push(stream);
+            return stream;
+          });
+        };
+
+        window.stopAllMediaStreams = function () {
+          console.log('🛑 Stopping all media streams...', window._activeMediaStreams.length);
+          window._activeMediaStreams.forEach((stream, index) => {
+            stream.getTracks().forEach(track => {
+              console.log(`🛑 Stopping track ${index}:`, track.kind, track.label, track.readyState);
+              track.stop();
+            });
+          });
+          window._activeMediaStreams = [];
+          console.log('✅ All media streams stopped');
+        };
+      })();
+    </script>
+
+    <script src="flutter_bootstrap.js" async></script>
+  </body>
+
 </html>

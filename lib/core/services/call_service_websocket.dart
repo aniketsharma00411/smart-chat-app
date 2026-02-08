@@ -7,12 +7,15 @@ import 'package:flutter_sound/flutter_sound.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../config/api_config.dart';
 import 'call_service.dart';
+// ignore: avoid_web_libraries_in_flutter
+import 'dart:js' as js;
 
 class CallServiceWebSocket implements CallService {
   WebSocketChannel? _channel;
 
   StreamSubscription? _micSubscription;
   StreamSubscription? _audioSubscription;
+  StreamController<Uint8List>? _recordingStreamController;
 
   final _isConnectedController = StreamController<bool>.broadcast();
   final _isMicOnController = StreamController<bool>.broadcast();
@@ -21,8 +24,9 @@ class CallServiceWebSocket implements CallService {
 
   bool _isMicMuted = false;
   bool _isDubbingEnabled = false;
-  String _targetLanguage = 'es'; // Default to Spanish
+  String _targetLanguage = 'en'; // Default to English, will be updated from user preferences
   String? _currentCallId;
+  bool _isCleaningUp = false; // Prevent concurrent cleanup
 
   // Configuration
   late final String _baseUrl = ApiConfig.socketUrl;
@@ -49,6 +53,10 @@ class CallServiceWebSocket implements CallService {
     await _recorderModule!.openRecorder();
     await _playerModule!.openPlayer();
 
+    // Emit initial states to ensure UI is in sync
+    _isDubbingEnabledController.add(_isDubbingEnabled);
+    _targetLanguageController.add(_targetLanguage);
+
     debugPrint("✅ Audio Stream Initialized");
   }
 
@@ -72,9 +80,14 @@ class CallServiceWebSocket implements CallService {
 
     try {
       // Build URL with optional target_lang query parameter
+      // ONLY send target_lang when dubbing is explicitly enabled
+      // This prevents unnecessary API costs when translation is not needed
       String url = "$_baseUrl/$callId";
-      if (_isDubbingEnabled) {
+      if (_isDubbingEnabled && _targetLanguage.isNotEmpty) {
         url += "?target_lang=$_targetLanguage";
+        debugPrint("🌍 Translation enabled: $_targetLanguage");
+      } else {
+        debugPrint("🔊 Passthrough mode: No translation (saves API costs)");
       }
       final uri = Uri.parse(url);
       debugPrint("🔌 Connecting to WebSocket: $uri (Base: $_baseUrl)");
@@ -138,14 +151,14 @@ class CallServiceWebSocket implements CallService {
 
       debugPrint("🎤 Starting Recorder...");
       try {
-        final recordingStream = StreamController<Uint8List>();
+        _recordingStreamController = StreamController<Uint8List>();
         
         // CRITICAL: Try to record at 16kHz, but browser may override this
         // Web browsers typically force 48kHz or 44.1kHz
         const requestedSampleRate = 16000;
         
         await _recorderModule!.startRecorder(
-          toStream: recordingStream.sink,
+          toStream: _recordingStreamController!.sink,
           codec: Codec.pcm16,
           numChannels: 1,
           sampleRate: requestedSampleRate,
@@ -163,7 +176,7 @@ class CallServiceWebSocket implements CallService {
         DateTime? firstChunkTime;
         int totalSamples = 0;
         
-        _recorderSubscription = recordingStream.stream.listen((data) {
+        _recorderSubscription = _recordingStreamController!.stream.listen((data) {
           if (data.isEmpty) return;
 
           chunkCount++;
@@ -218,13 +231,15 @@ class CallServiceWebSocket implements CallService {
       debugPrint("🎤 Audio Loop Started");
     } catch (e) {
       debugPrint("❌ Join Call Failed: $e");
-      _cleanup();
+      await _cleanup();
     }
   }
 
   @override
   Future<void> endCall() async {
-    _cleanup();
+    debugPrint("📞 endCall() called - starting cleanup...");
+    await _cleanup();
+    debugPrint("📞 endCall() completed");
   }
 
   @override
@@ -257,11 +272,13 @@ class CallServiceWebSocket implements CallService {
 
     debugPrint("🔄 Reconnecting with new dubbing settings...");
     
-    // Store current mic state
+    // Store current state before cleanup
     final wasMuted = _isMicMuted;
+    final callId = _currentCallId!; // Save callId before cleanup
     
-    // End current call (this will cleanup and nullify modules)
-    await endCall();
+    // IMPORTANT: Only cleanup local resources, don't update Firestore
+    // This is just a reconnection, not ending the call
+    await _cleanup();
     
     // Small delay to ensure clean disconnect
     await Future.delayed(const Duration(milliseconds: 200));
@@ -275,8 +292,8 @@ class CallServiceWebSocket implements CallService {
     await _playerModule!.openPlayer();
     debugPrint("✅ Audio modules re-initialized");
     
-    // Rejoin with new settings
-    await joinCall(_currentCallId!);
+    // Rejoin with new settings using saved callId
+    await joinCall(callId);
     
     // Restore mic state
     if (wasMuted != _isMicMuted) {
@@ -312,24 +329,140 @@ class CallServiceWebSocket implements CallService {
     }
   }
 
-  void _cleanup() {
+  Future<void> _cleanup() async {
+    debugPrint("🛑🛑🛑 _cleanup() CALLED 🛑🛑🛑");
+    
+    if (_isCleaningUp) {
+      debugPrint("⚠️ Cleanup already in progress, skipping...");
+      return;
+    }
+    
+    _isCleaningUp = true;
+    debugPrint("🛑 Cleaning up call resources...");
+    debugPrint("🎤 _recorderModule = ${_recorderModule != null ? 'NOT NULL' : 'NULL'}");
+    debugPrint("🔊 _playerModule = ${_playerModule != null ? 'NOT NULL' : 'NULL'}");
+    
     _isConnectedController.add(false);
-    _channel?.sink.close();
-    _channel = null;
+    
+    // STEP 1: Stop recorder immediately to release microphone access
+    debugPrint("🎤 STEP 1: Checking recorder module...");
+    try {
+      if (_recorderModule != null) {
+        debugPrint("🎤 Recorder module EXISTS - proceeding with stop");
+        final isRecording = _recorderModule!.isRecording;
+        debugPrint("🎤 isRecording=$isRecording");
+        
+        // ALWAYS call stopRecorder, even if isRecording is false
+        debugPrint("🎤 Calling stopRecorder()...");
+        await _recorderModule!.stopRecorder();
+        debugPrint("✅ stopRecorder() completed");
+        
+        // Close recorder module immediately to release mic
+        debugPrint("🎤 Calling closeRecorder()...");
+        await _recorderModule!.closeRecorder();
+        debugPrint("✅ closeRecorder() completed");
+        
+        // CRITICAL: Give browser extra time to release mic on web
+        debugPrint("⏳ Waiting 500ms for browser to release microphone...");
+        await Future.delayed(const Duration(milliseconds: 500));
+        
+        // Force stop all media stream tracks (workaround for flutter_sound web bug)
+        if (kIsWeb) {
+          try {
+            debugPrint("🌐 Calling stopAllMediaStreams()...");
+            js.context.callMethod('stopAllMediaStreams');
+            debugPrint("✅ stopAllMediaStreams() called");
+            await Future.delayed(const Duration(milliseconds: 100));
+          } catch (e) {
+            debugPrint("⚠️ Could not call stopAllMediaStreams: $e");
+          }
+        }
+        
+        _recorderModule = null;
+        debugPrint("✅ Recorder module nullified");
+      } else {
+        debugPrint("❌❌❌ RECORDER MODULE IS NULL - CANNOT RELEASE MIC! ❌❌❌");
+      }
+    } catch (e) {
+      debugPrint("❌ CRITICAL ERROR stopping/closing recorder: $e");
+      debugPrint("Stack trace: ${StackTrace.current}");
+      // Force nullify even on error
+      _recorderModule = null;
+    }
+    
+    // Additional long delay for web platform
+    if (kIsWeb) {
+      debugPrint("🌐 Web platform: Additional 300ms wait for mic release...");
+      await Future.delayed(const Duration(milliseconds: 300));
+    }
+    
+    // STEP 2: Wait for recorder to fully release microphone
+    debugPrint("⏳ Waiting for mic release...");
+    await Future.delayed(const Duration(milliseconds: 200));
+    
+    // STEP 3: Cancel subscription to stop data flow
+    try {
+      await _recorderSubscription?.cancel();
+      _recorderSubscription = null;
+      debugPrint("✅ Recorder subscription canceled");
+    } catch (e) {
+      debugPrint("⚠️ Error canceling recorder subscription: $e");
+    }
+    
+    // STEP 4: Close recording stream controller
+    try {
+      await _recordingStreamController?.close();
+      _recordingStreamController = null;
+      debugPrint("✅ Recording stream controller closed");
+    } catch (e) {
+      debugPrint("⚠️ Error closing recording stream: $e");
+    }
 
-    _recorderModule?.closeRecorder();
-    _playerModule?.closePlayer();
-    _recorderModule = null;
-    _playerModule = null;
+    try {
+      await _micSubscription?.cancel();
+      _micSubscription = null;
+    } catch (e) {
+      debugPrint("⚠️ Error canceling mic subscription: $e");
+    }
 
-    _recorderSubscription?.cancel();
-    _recorderSubscription = null;
+    try {
+      await _audioSubscription?.cancel();
+      _audioSubscription = null;
+    } catch (e) {
+      debugPrint("⚠️ Error canceling audio subscription: $e");
+    }
+    
+    // Close WebSocket connection (stop network traffic)
+    try {
+      if (_channel != null) {
+        debugPrint("🔌 Closing WebSocket...");
+        await _channel!.sink.close(1000, 'Call ended by user'); // Normal closure
+        _channel = null;
+        debugPrint("✅ WebSocket closed");
+      }
+    } catch (e) {
+      debugPrint("⚠️ Error closing websocket: $e");
+      _channel = null;
+    }
 
-    _micSubscription?.cancel();
-    _micSubscription = null;
+    // Close player module
+    try {
+      if (_playerModule != null) {
+        debugPrint("🔊 Stopping player...");
+        await _playerModule!.stopPlayer();
+        debugPrint("🔊 Closing player module...");
+        await _playerModule!.closePlayer();
+        _playerModule = null;
+        debugPrint("✅ Player module closed and nullified");
+      }
+    } catch (e) {
+      debugPrint("⚠️ Error closing player module: $e");
+      _playerModule = null;
+    }
 
-    _audioSubscription?.cancel();
-    _audioSubscription = null;
+    _currentCallId = null;
+    _isCleaningUp = false;
+    debugPrint("✅ Call cleanup complete");
   }
 
   // Flutter Sound
@@ -361,6 +494,8 @@ class CallServiceWebSocket implements CallService {
 
   @override
   void dispose() {
+    // Note: dispose is synchronous, so we can't await here
+    // Call endCall() before disposing if you need async cleanup
     _cleanup();
     _isConnectedController.close();
     _isMicOnController.close();

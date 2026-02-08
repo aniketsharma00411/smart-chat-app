@@ -420,7 +420,7 @@ CHANNELS = 1
 
 
 @app.websocket("/ws/call/{call_id}")
-async def websocket_endpoint(websocket: WebSocket, call_id: str, target_lang: str = "es"):
+async def websocket_endpoint(websocket: WebSocket, call_id: str, target_lang: Optional[str] = None):
     await manager.connect(websocket, call_id)
 
     # Queue for audio chunks going to Gemini Live

@@ -1,6 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+// ignore: avoid_web_libraries_in_flutter
+import 'dart:html' as html show window;
 
 import '../../../core/providers/providers.dart';
 import '../widgets/call_settings_sheet.dart';
@@ -17,11 +20,11 @@ class CallScreen extends ConsumerStatefulWidget {
 class _CallScreenState extends ConsumerState<CallScreen>
     with SingleTickerProviderStateMixin {
   bool _isMicOff = false;
-  bool _isSpeakerOn = true;
   bool _isDubbingEnabled = false;
-  String _targetLanguage = 'es';
+  String _targetLanguage = 'en'; // Default to English, will be updated from user preferences
   String _connectionStatus = "Connecting to Server...";
   late AnimationController _pulseController;
+  bool _hasEndedCall = false; // Track if we've already ended the call
 
   @override
   void initState() {
@@ -41,12 +44,28 @@ class _CallScreenState extends ConsumerState<CallScreen>
 
     await callService.init();
 
+    // Load user's preferred language from settings
+    final user = ref.read(currentUserProvider).value;
+    if (user != null) {
+      final firestoreService = ref.read(firestoreServiceProvider);
+      final userDoc = await firestoreService.getUser(user.uid);
+      if (userDoc != null && userDoc.containsKey('preferredLanguage')) {
+        final preferredLanguage = userDoc['preferredLanguage'] as String;
+        // Set the default target language to user's preference
+        _targetLanguage = preferredLanguage;
+        callService.setTargetLanguage(preferredLanguage);
+      }
+    }
+
     // Listen to connection state
     callService.isConnected.listen((connected) {
       if (mounted) {
         setState(() {
-          _connectionStatus =
-              connected ? "Connected • Dubbing Active" : "Disconnected";
+          _connectionStatus = connected
+              ? (_isDubbingEnabled
+                  ? "Connected • Translation Active"
+                  : "Connected")
+              : "Disconnected";
         });
       }
     });
@@ -65,6 +84,17 @@ class _CallScreenState extends ConsumerState<CallScreen>
       if (mounted) {
         setState(() {
           _isDubbingEnabled = enabled;
+          // Update connection status when dubbing state changes
+          final callServiceState = ref.read(callServiceProvider);
+          callServiceState.isConnected.listen((connected) {
+            if (mounted && connected) {
+              setState(() {
+                _connectionStatus = _isDubbingEnabled
+                    ? "Connected • Translation Active"
+                    : "Connected";
+              });
+            }
+          });
         });
       }
     });
@@ -88,7 +118,8 @@ class _CallScreenState extends ConsumerState<CallScreen>
   @override
   void dispose() {
     _pulseController.dispose();
-    ref.read(callServiceProvider).endCall();
+    // Don't call endCall here - it's async and should be called explicitly
+    // when the disconnect button is pressed. The cleanup will happen there.
     super.dispose();
   }
 
@@ -103,7 +134,14 @@ class _CallScreenState extends ConsumerState<CallScreen>
       if (callData['status'] == 'ended' || callData['status'] == 'rejected') {
         if (context.mounted &&
             GoRouterState.of(context).uri.toString().startsWith('/call')) {
-          context.pop();
+          // On web, do a full page reload to release microphone
+          // On other platforms, just pop
+          if (kIsWeb) {
+            debugPrint("🔄 Call ended - reloading page to release microphone...");
+            html.window.location.href = '/chats';
+          } else {
+            context.pop();
+          }
         }
       }
     });
@@ -132,7 +170,7 @@ class _CallScreenState extends ConsumerState<CallScreen>
                 children: [
                   const SizedBox(height: 60),
                   const Text(
-                    "AI Dubbing Call",
+                    "Audio Call",
                     style: TextStyle(
                         color: Colors.white70,
                         fontSize: 14,
@@ -285,26 +323,52 @@ class _CallScreenState extends ConsumerState<CallScreen>
                           },
                         ),
                         _ControlButton(
-                          icon: Icons.settings,
-                          isActive: false,
+                          icon: Icons.auto_awesome,
+                          isActive: _isDubbingEnabled,
                           onTap: _showCallSettings,
+                          label: 'AI Translation',
                         ),
                         _ControlButton(
                           icon: Icons.call_end,
                           color: Colors.red,
                           onTap: () async {
-                            await ref
-                                .read(firestoreServiceProvider)
-                                .endCall(widget.callId);
-                          },
-                        ),
-                        _ControlButton(
-                          icon:
-                              _isSpeakerOn ? Icons.volume_up : Icons.volume_off,
-                          isActive: _isSpeakerOn,
-                          onTap: () {
-                            setState(() => _isSpeakerOn = !_isSpeakerOn);
-                            // TODO: Implement speaker toggle if sound_stream supports it easily
+                            if (_hasEndedCall) return; // Prevent double-tap
+                            _hasEndedCall = true;
+                            
+                            try {
+                              // End the call service first (cleanup audio/websocket)
+                              debugPrint("🔴 Ending call...");
+                              await ref.read(callServiceProvider).endCall();
+                              debugPrint("✅ Call service ended");
+                              
+                              // Update Firestore status
+                              await ref
+                                  .read(firestoreServiceProvider)
+                                  .endCall(widget.callId);
+                              debugPrint("✅ Firestore updated");
+                              
+                              // Force page reload on web to release microphone
+                              // (workaround for flutter_sound web bug)
+                              if (kIsWeb) {
+                                debugPrint("🔄 Forcing page reload to release microphone...");
+                                html.window.location.href = '/chats';
+                              }
+                            } catch (e) {
+                              debugPrint("❌ Error ending call: $e");
+                              _hasEndedCall = false; // Reset on error
+                              // Try to navigate back manually if there's an error
+                              if (mounted && context.mounted) {
+                                try {
+                                  if (kIsWeb) {
+                                    html.window.location.href = '/chats';
+                                  } else {
+                                    context.pop();
+                                  }
+                                } catch (popError) {
+                                  debugPrint("⚠️ Could not navigate: $popError");
+                                }
+                              }
+                            }
                           },
                         ),
                       ],
@@ -400,12 +464,14 @@ class _ControlButton extends StatelessWidget {
   final bool isActive;
   final Color color;
   final VoidCallback onTap;
+  final String? label;
 
   const _ControlButton({
     required this.icon,
     this.isActive = false,
     this.color = Colors.white,
     required this.onTap,
+    this.label,
   });
 
   @override
@@ -430,6 +496,17 @@ class _ControlButton extends StatelessWidget {
                 size: 28),
           ),
         ),
+        if (label != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            label!,
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
       ],
     );
   }
