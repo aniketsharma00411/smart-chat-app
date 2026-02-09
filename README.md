@@ -4,7 +4,7 @@
 
 Vayu uses Gemini 3 to eliminate language barriers and enhance cross-cultural communication. It provides real-time voice call translation, intelligent tone analysis, and deep context reasoning to ensure every message—spoken or written—is understood exactly as intended.
 
-![Vayu Architecture](docs/architecture-full.png)
+![Vayu](assets/branding/thumbnail.png)
 
 ## ✨ Key Features
 
