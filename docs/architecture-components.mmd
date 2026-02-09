@@ -1,0 +1,132 @@
+graph LR
+    subgraph "Flutter Frontend Architecture"
+        subgraph "Presentation Layer"
+            AuthUI[Auth UI<br/>Login/Signup]
+            ChatUI[Chat UI<br/>Message List]
+            CallUI[Call UI<br/>Voice Interface]
+            AIAssistUI[AI Assistant UI<br/>Context Help]
+            SettingsUI[Settings UI<br/>Preferences]
+            SplashUI[Splash Screen]
+        end
+        
+        subgraph "State Management - Riverpod"
+            AuthProvider[Auth Provider]
+            ChatProvider[Chat Provider]
+            CallProvider[Call Provider]
+            AIProvider[AI Provider]
+            SettingsProvider[Settings Provider]
+        end
+        
+        subgraph "Services Layer"
+            AuthSvc[Auth Service<br/>Firebase Auth]
+            ChatSvc[Chat Service<br/>Firestore]
+            APISvc[API Service<br/>HTTP Client]
+            WSvc[WebSocket Service<br/>Audio Streaming]
+        end
+        
+        subgraph "Core"
+            Router[App Router<br/>Go Router]
+            Theme[Theme Config<br/>Material Design]
+            Config[App Config<br/>Environment]
+        end
+    end
+    
+    subgraph "Backend Architecture"
+        subgraph "API Layer"
+            FastAPIApp[FastAPI Application<br/>ASGI Server]
+            Middleware[CORS Middleware<br/>Authentication]
+            Routes[API Routes<br/>REST Endpoints]
+        end
+        
+        subgraph "Business Logic"
+            ToneService[Tone Analyzer]
+            TranslateService[Translation Service]
+            RewriteService[Rewrite Service]
+            ContextService[Context Explainer]
+        end
+        
+        subgraph "Real-time Processing"
+            WSHandler[WebSocket Handler<br/>Connection Manager]
+            AudioProcessor[Audio Processor<br/>16kHz Linear16]
+            STTService[STT Service<br/>Google Speech V2]
+            TTSService[TTS Service<br/>Google Cloud TTS]
+            TranslationPipeline[Translation Pipeline<br/>Async Queues]
+        end
+        
+        subgraph "External Clients"
+            GeminiClient[Gemini Client<br/>Google AI SDK]
+            SpeechClient[Speech V2 Client<br/>Async]
+            TTranslateClient[Translate Client]
+            TTTSClient[TTS Client<br/>Async]
+        end
+    end
+    
+    %% UI to Providers
+    AuthUI --> AuthProvider
+    ChatUI --> ChatProvider
+    CallUI --> CallProvider
+    AIAssistUI --> AIProvider
+    SettingsUI --> SettingsProvider
+    
+    %% Providers to Services
+    AuthProvider --> AuthSvc
+    ChatProvider --> ChatSvc
+    ChatProvider --> APISvc
+    CallProvider --> WSvc
+    AIProvider --> APISvc
+    
+    %% Services to Core
+    AuthSvc --> Config
+    APISvc --> Config
+    WSvc --> Config
+    
+    %% Router manages all UI
+    Router -.-> AuthUI
+    Router -.-> ChatUI
+    Router -.-> CallUI
+    Router -.-> AIAssistUI
+    Router -.-> SettingsUI
+    Router -.-> SplashUI
+    
+    %% Backend Flow
+    Routes --> ToneService
+    Routes --> TranslateService
+    Routes --> RewriteService
+    Routes --> ContextService
+    Routes --> WSHandler
+    
+    %% Services to Clients
+    ToneService --> GeminiClient
+    TranslateService --> GeminiClient
+    RewriteService --> GeminiClient
+    ContextService --> GeminiClient
+    
+    %% WebSocket Pipeline
+    WSHandler --> AudioProcessor
+    AudioProcessor --> TranslationPipeline
+    TranslationPipeline --> STTService
+    TranslationPipeline --> TTSService
+    STTService --> SpeechClient
+    TTSService --> TTTSClient
+    TranslationPipeline --> GeminiClient
+    
+    %% Cross Communication
+    APISvc -.->|HTTP/REST| FastAPIApp
+    WSvc -.->|WebSocket| WSHandler
+    AuthSvc -.->|Firebase SDK| Firebase[(Firebase)]
+    ChatSvc -.->|Firestore SDK| Firebase
+    
+    %% Styling
+    classDef uiClass fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    classDef providerClass fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef serviceClass fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
+    classDef coreClass fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    classDef backendClass fill:#fce4ec,stroke:#c2185b,stroke-width:2px
+    classDef clientClass fill:#e0f7fa,stroke:#00838f,stroke-width:2px
+    
+    class AuthUI,ChatUI,CallUI,AIAssistUI,SettingsUI,SplashUI uiClass
+    class AuthProvider,ChatProvider,CallProvider,AIProvider,SettingsProvider providerClass
+    class AuthSvc,ChatSvc,APISvc,WSvc serviceClass
+    class Router,Theme,Config coreClass
+    class FastAPIApp,Middleware,Routes,ToneService,TranslateService,RewriteService,ContextService,WSHandler,AudioProcessor,STTService,TTSService,TranslationPipeline backendClass
+    class GeminiClient,SpeechClient,TTranslateClient,TTTSClient clientClass

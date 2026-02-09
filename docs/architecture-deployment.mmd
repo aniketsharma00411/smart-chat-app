@@ -1,0 +1,119 @@
+graph TB
+    subgraph "Users"
+        Browser[Web Browser<br/>Chrome/Safari/Firefox]
+    end
+    
+    subgraph "CDN & Hosting"
+        FirebaseCDN[Firebase Hosting<br/>Global CDN]
+        StaticAssets[Static Assets<br/>build/web/*.js, *.css]
+    end
+    
+    subgraph "Production Environment"
+        subgraph "Reverse Proxy"
+            Caddy[Caddy Server<br/>HTTPS/TLS<br/>Port 443]
+        end
+        
+        subgraph "Application Container"
+            DockerContainer[Docker Container]
+            FastAPIApp[FastAPI App<br/>Uvicorn ASGI<br/>Port 8080]
+            PythonRuntime[Python 3.11+<br/>Dependencies]
+        end
+        
+        subgraph "Configuration"
+            EnvVars[Environment Variables<br/>GEMINI_API_KEY<br/>GOOGLE_PROJECT_ID<br/>GOOGLE_CLOUD_LOCATION]
+            RequirementsTxt[requirements.txt<br/>fastapi, google-genai<br/>google-cloud-speech<br/>google-cloud-texttospeech]
+        end
+    end
+    
+    subgraph "Firebase Platform"
+        FirebaseAuth[Firebase Authentication<br/>Identity Provider]
+        CloudFirestore[Cloud Firestore<br/>NoSQL Database<br/>Real-time Sync]
+        FirebaseSDK[Firebase Admin SDK]
+    end
+    
+    subgraph "Google Cloud APIs"
+        GeminiAPI[Gemini 3 Flash API<br/>AI Model Inference<br/>Text Generation]
+        
+        SpeechAPI[Cloud Speech-to-Text V2<br/>Chirp 3 Model<br/>Streaming Recognition<br/>16kHz Audio]
+        
+        TTSAPI[Cloud Text-to-Speech<br/>Multi-language Voices<br/>Neural2 & WaveNet]
+        
+        TranslateAPI[Cloud Translation API<br/>100+ Languages]
+        
+        GCPProject[GCP Project<br/>IAM & Credentials]
+    end
+    
+    subgraph "Infrastructure as Code"
+        Terraform[Terraform<br/>HCL Configuration]
+        TfState[terraform.tfstate<br/>State Management]
+        TfVars[terraform.tfvars<br/>Variables]
+    end
+    
+    subgraph "Development Tools"
+        GitRepo[Git Repository<br/>Source Control]
+        LocalDev[Local Development<br/>flutter run -d web<br/>python main.py]
+        VSCode[VS Code<br/>IDE]
+    end
+    
+    %% User Flow
+    Browser -->|HTTPS| FirebaseCDN
+    Browser -->|HTTPS| Caddy
+    FirebaseCDN --> StaticAssets
+    
+    %% Reverse Proxy
+    Caddy -->|Proxy HTTP| FastAPIApp
+    
+    %% Container
+    DockerContainer -->|Contains| FastAPIApp
+    DockerContainer -->|Uses| PythonRuntime
+    FastAPIApp -->|Reads| EnvVars
+    PythonRuntime -->|Installs| RequirementsTxt
+    
+    %% Firebase
+    Browser -->|Firebase SDK| FirebaseAuth
+    Browser -->|Firebase SDK| CloudFirestore
+    FastAPIApp -.->|Optional| FirebaseSDK
+    
+    %% Google Cloud APIs
+    FastAPIApp -->|REST/gRPC| GeminiAPI
+    FastAPIApp -->|gRPC Streaming| SpeechAPI
+    FastAPIApp -->|REST| TTSAPI
+    FastAPIApp -.->|Fallback| TranslateAPI
+    
+    GeminiAPI --> GCPProject
+    SpeechAPI --> GCPProject
+    TTSAPI --> GCPProject
+    TranslateAPI --> GCPProject
+    
+    %% Infrastructure
+    Terraform -.->|Provisions| FirebaseCDN
+    Terraform -.->|Manages| GCPProject
+    Terraform -->|Stores| TfState
+    Terraform -->|Reads| TfVars
+    
+    %% Development
+    GitRepo -->|Push| Caddy
+    LocalDev -->|Test| FastAPIApp
+    LocalDev -->|Test| Browser
+    VSCode -->|Edit| GitRepo
+    
+    %% Deployment
+    GitRepo -.->|CI/CD| DockerContainer
+    GitRepo -.->|Deploy| FirebaseCDN
+    
+    %% Styling
+    classDef userClass fill:#4a148c,stroke:#333,stroke-width:3px,color:#fff
+    classDef hostingClass fill:#ffca28,stroke:#333,stroke-width:2px,color:#000
+    classDef appClass fill:#0f9d58,stroke:#333,stroke-width:2px,color:#fff
+    classDef firebaseClass fill:#ff6f00,stroke:#333,stroke-width:2px,color:#fff
+    classDef gcpClass fill:#ea4335,stroke:#333,stroke-width:2px,color:#fff
+    classDef infraClass fill:#607d8b,stroke:#333,stroke-width:2px,color:#fff
+    classDef devClass fill:#37474f,stroke:#333,stroke-width:2px,color:#fff
+    
+    class Browser userClass
+    class FirebaseCDN,StaticAssets hostingClass
+    class Caddy,DockerContainer,FastAPIApp,PythonRuntime,EnvVars,RequirementsTxt appClass
+    class FirebaseAuth,CloudFirestore,FirebaseSDK firebaseClass
+    class GeminiAPI,SpeechAPI,TTSAPI,TranslateAPI,GCPProject gcpClass
+    class Terraform,TfState,TfVars infraClass
+    class GitRepo,LocalDev,VSCode devClass

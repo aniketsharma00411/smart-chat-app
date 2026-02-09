@@ -1,0 +1,73 @@
+sequenceDiagram
+    participant User as User Browser
+    participant Flutter as Flutter Web App
+    participant Firebase as Firebase Services
+    participant FastAPI as FastAPI Backend
+    participant Gemini as Gemini 3 API
+    participant GCP as Google Cloud<br/>(Speech/TTS)
+    
+    Note over User,GCP: Authentication Flow
+    User->>Flutter: Open App
+    Flutter->>Firebase: Check Auth State
+    Firebase-->>Flutter: User Status
+    alt Not Authenticated
+        User->>Flutter: Click Google Sign In
+        Flutter->>Firebase: Sign In with Google
+        Firebase-->>Flutter: Auth Token & User
+        Flutter->>Firebase: Create/Update User Doc
+    end
+    
+    Note over User,GCP: Chat with AI Features
+    User->>Flutter: Type Message
+    User->>Flutter: Request Tone Analysis
+    Flutter->>FastAPI: POST /api/tone
+    FastAPI->>Gemini: Analyze Tone + Context
+    Gemini-->>FastAPI: Tone Result (JSON)
+    FastAPI-->>Flutter: Tone Response
+    
+    User->>Flutter: Request Translation
+    Flutter->>FastAPI: POST /api/translate
+    FastAPI->>Gemini: Translate Text
+    Gemini-->>FastAPI: Translated Text
+    FastAPI-->>Flutter: Translation Response
+    
+    User->>Flutter: Send Message
+    Flutter->>Firebase: Write to Firestore
+    Firebase-->>Flutter: Real-time Update
+    Flutter-->>User: Display Message
+    
+    Note over User,GCP: Real-time Voice Call Translation
+    User->>Flutter: Start Call
+    Flutter->>FastAPI: WebSocket /ws/call/{id}?target_lang=es
+    FastAPI-->>Flutter: Connection Accepted
+    
+    loop Audio Streaming
+        User->>Flutter: Speak (Audio Chunk)
+        Flutter->>FastAPI: Send Audio Bytes (WebSocket)
+        
+        alt Translation Enabled
+            FastAPI->>GCP: Stream to Speech-to-Text V2
+            GCP-->>FastAPI: Interim/Final Transcript
+            FastAPI->>Gemini: Translate Text
+            Gemini-->>FastAPI: Translated Text
+            FastAPI->>GCP: Text-to-Speech
+            GCP-->>FastAPI: Audio Response
+            FastAPI->>Flutter: Broadcast Translated Audio
+        else Passthrough Mode
+            FastAPI->>Flutter: Broadcast Raw Audio
+        end
+        
+        Flutter-->>User: Play Audio
+    end
+    
+    User->>Flutter: End Call
+    Flutter->>FastAPI: Close WebSocket
+    FastAPI-->>Flutter: Disconnected
+    
+    Note over User,GCP: Batch Translation (Chat History)
+    User->>Flutter: View Chat in Different Language
+    Flutter->>FastAPI: POST /api/translate-batch
+    FastAPI->>Gemini: Translate Multiple Messages
+    Gemini-->>FastAPI: Batch Translations
+    FastAPI-->>Flutter: All Translations
+    Flutter-->>User: Display Translated Chat

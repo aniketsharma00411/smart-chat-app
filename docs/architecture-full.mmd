@@ -1,0 +1,113 @@
+graph TB
+    subgraph "Client Layer"
+        FlutterWeb[Flutter Web App<br/>Dart/Flutter]
+        
+        subgraph "Features"
+            Auth[Auth Module<br/>Firebase Auth]
+            Chat[Chat Module<br/>Real-time Messaging]
+            Call[Call Module<br/>Voice Calls]
+            AIAssist[AI Assistant<br/>Context Help]
+            Settings[Settings]
+        end
+        
+        subgraph "Core Services"
+            Router[Go Router<br/>Navigation]
+            StateManager[Riverpod<br/>State Management]
+            AuthService[Auth Service]
+            Theme[App Theme]
+        end
+    end
+    
+    subgraph "Firebase Services"
+        FirebaseAuth[Firebase Authentication<br/>Google Sign-In]
+        Firestore[Cloud Firestore<br/>NoSQL Database]
+        FirebaseHost[Firebase Hosting<br/>Static CDN]
+    end
+    
+    subgraph "Backend API - Python/FastAPI"
+        FastAPI[FastAPI Server<br/>Port 8080]
+        
+        subgraph "API Endpoints"
+            ToneAPI["POST /api/tone<br/>Tone Analysis"]
+            TranslateAPI["POST /api/translate<br/>Text Translation"]
+            BatchTranslateAPI["POST /api/translate-batch<br/>Batch Translation"]
+            RewriteAPI["POST /api/rewrite<br/>Message Rewriting"]
+            ExplainAPI["POST /api/explain-context<br/>Context Explanation"]
+            HealthAPI["GET /health<br/>Health Check"]
+        end
+        
+        subgraph "WebSocket"
+            WSEndpoint["WebSocket /ws/call/{call_id}<br/>Real-time Audio Stream"]
+            ConnManager[Connection Manager<br/>Multi-user Support]
+        end
+        
+        subgraph "Audio Pipeline"
+            STT[Speech-to-Text<br/>Google Cloud Speech V2]
+            AudioTranslate[Real-time Translation<br/>Gemini 3]
+            TTS[Text-to-Speech<br/>Google Cloud TTS]
+        end
+    end
+    
+    subgraph "Google Cloud Platform"
+        GeminiAPI[Gemini 3 Flash API<br/>AI/ML Model]
+        SpeechV2[Cloud Speech V2<br/>Chirp 3 Model]
+        TranslateGCP[Cloud Translation API]
+        TTSGCP[Cloud Text-to-Speech API]
+    end
+    
+    subgraph "Infrastructure"
+        Docker[Docker Container<br/>Backend Deployment]
+        Caddy[Caddy Server<br/>Reverse Proxy]
+        Terraform[Terraform<br/>IaC Management]
+    end
+    
+    %% Client to Firebase
+    FlutterWeb -->|Authentication| FirebaseAuth
+    FlutterWeb -->|Read/Write Data| Firestore
+    FirebaseHost -.->|Serves| FlutterWeb
+    
+    %% Feature Dependencies
+    Auth --> AuthService
+    Chat --> StateManager
+    Call --> StateManager
+    AIAssist --> StateManager
+    
+    %% Client to Backend
+    FlutterWeb -->|HTTP/REST| FastAPI
+    FlutterWeb -->|WebSocket| WSEndpoint
+    
+    %% API to Gemini
+    ToneAPI --> GeminiAPI
+    TranslateAPI --> GeminiAPI
+    BatchTranslateAPI --> GeminiAPI
+    RewriteAPI --> GeminiAPI
+    ExplainAPI --> GeminiAPI
+    
+    %% WebSocket Audio Flow
+    WSEndpoint --> ConnManager
+    ConnManager --> STT
+    STT --> SpeechV2
+    STT --> AudioTranslate
+    AudioTranslate --> GeminiAPI
+    AudioTranslate --> TTS
+    TTS --> TTSGCP
+    TTS --> ConnManager
+    
+    %% Infrastructure
+    Docker -->|Contains| FastAPI
+    Caddy -->|Routes to| Docker
+    Terraform -.->|Provisions| GeminiAPI
+    Terraform -.->|Provisions| FirebaseHost
+    
+    %% Styling
+    classDef frontend fill:#4285f4,stroke:#333,stroke-width:2px,color:#fff
+    classDef backend fill:#0f9d58,stroke:#333,stroke-width:2px,color:#fff
+    classDef firebase fill:#ffca28,stroke:#333,stroke-width:2px,color:#000
+    classDef gcp fill:#ea4335,stroke:#333,stroke-width:2px,color:#fff
+    classDef infra fill:#9e9e9e,stroke:#333,stroke-width:2px,color:#fff
+    
+    class FlutterWeb,Auth,Chat,Call,AIAssist,Settings,Router,StateManager,AuthService,Theme frontend
+    class FastAPI,ToneAPI,TranslateAPI,BatchTranslateAPI,RewriteAPI,ExplainAPI,HealthAPI,WSEndpoint,ConnManager,STT,AudioTranslate,TTS backend
+    class FirebaseAuth,Firestore,FirebaseHost firebase
+    class GeminiAPI,SpeechV2,TranslateGCP,TTSGCP gcp
+    class Docker,Caddy,Terraform infra
