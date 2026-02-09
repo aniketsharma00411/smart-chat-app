@@ -1,4 +1,4 @@
-// import 'package:cloud_firestore_platform_interface/cloud_firestore_platform_interface.dart'; 
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class Message {
   final String id;
@@ -22,16 +22,41 @@ class Message {
   });
 
   factory Message.fromMap(Map<String, dynamic> map, String id) {
+    // Handle timestamp properly for both web and mobile
+    DateTime parsedTimestamp;
+    final timestampValue = map['timestamp'];
+    
+    if (timestampValue == null) {
+      parsedTimestamp = DateTime.now();
+    } else if (timestampValue is DateTime) {
+      parsedTimestamp = timestampValue;
+    } else if (timestampValue is Timestamp) {
+      parsedTimestamp = timestampValue.toDate();
+    } else {
+      // For web builds, check if object has toDate method (duck typing)
+      try {
+        if (timestampValue is Map && timestampValue.containsKey('seconds') && timestampValue.containsKey('nanoseconds')) {
+          // Raw Firebase timestamp object (web)
+          final seconds = timestampValue['seconds'] as int;
+          final nanoseconds = (timestampValue['nanoseconds'] as int?) ?? 0;
+          parsedTimestamp = DateTime.fromMillisecondsSinceEpoch(seconds * 1000 + nanoseconds ~/ 1000000);
+        } else if (timestampValue.toString().contains('Timestamp')) {
+          // Has toDate method but type check failed
+          parsedTimestamp = (timestampValue as dynamic).toDate();
+        } else {
+          throw Exception('Unknown timestamp format');
+        }
+      } catch (e) {
+        print('❌ Message $id: Failed to parse timestamp: $e, value: $timestampValue, type: ${timestampValue.runtimeType}');
+        parsedTimestamp = DateTime.now();
+      }
+    }
+    
     return Message(
       id: id,
       text: map['text'] ?? '',
       senderId: map['senderId'] ?? '',
-      // Handle Timestamp or DateTime
-      timestamp: (map['timestamp'] is DateTime) 
-          ? map['timestamp'] 
-          : (map['timestamp'] != null && map['timestamp'].runtimeType.toString().contains('Timestamp')) 
-              ? (map['timestamp'] as dynamic).toDate() 
-              : DateTime.now(),
+      timestamp: parsedTimestamp,
       tone: map['tone'],
       translation: map['translation'],
       originalLanguage: map['originalLanguage'],
