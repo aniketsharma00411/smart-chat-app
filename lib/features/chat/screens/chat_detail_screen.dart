@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import 'package:vayu/core/providers/providers.dart';
 import 'package:vayu/features/chat/screens/rewrite_message_screen.dart';
 import 'package:vayu/features/chat/screens/explain_context_screen.dart';
@@ -23,6 +24,27 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
   final Set<String> _processingIds = {};
   String? _lastError;
   final Map<String, Map<String, dynamic>> _ephemeralTones = {};
+
+  String _formatTimestamp(DateTime timestamp) {
+    final now = DateTime.now();
+    final difference = now.difference(timestamp);
+    final dateFormat = DateFormat('MMM d');
+    final timeFormat = DateFormat('h:mm a');
+
+    if (difference.inMinutes < 1) {
+      return 'Just now';
+    } else if (difference.inHours < 1) {
+      return '${difference.inMinutes}m ago';
+    } else if (difference.inDays < 1 && now.day == timestamp.day) {
+      return 'Today at ${timeFormat.format(timestamp)}';
+    } else if (difference.inDays < 2 && now.day - timestamp.day == 1) {
+      return 'Yesterday at ${timeFormat.format(timestamp)}';
+    } else if (difference.inDays < 7) {
+      return '${DateFormat('EEEE').format(timestamp)} at ${timeFormat.format(timestamp)}';
+    } else {
+      return '${dateFormat.format(timestamp)} at ${timeFormat.format(timestamp)}';
+    }
+  }
 
   void _batchTranslateIfNeeded(
       List<Message> messages, String? preferredLanguage) async {
@@ -422,6 +444,17 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
                                           ),
                                         ],
                                       ],
+                                    ),
+                                  ),
+                                  // Timestamp
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    _formatTimestamp(msg.timestamp),
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: isMe
+                                          ? const Color(0xFF64748B)
+                                          : const Color(0xFF94A3B8),
                                     ),
                                   ),
                                   if (toneReason != null ||
