@@ -25,6 +25,29 @@ output "firebase_project" {
   value       = google_firebase_project.default.project
 }
 
+output "firebase_hosting_url" {
+  description = "Firebase Hosting URL for the web app"
+  value       = "https://${google_firebase_hosting_site.default.site_id}.web.app"
+}
+
+output "firebase_hosting_site_id" {
+  description = "Firebase Hosting site ID"
+  value       = google_firebase_hosting_site.default.site_id
+}
+
+output "deployment_info" {
+  description = "Deployment information"
+  value = {
+    backend_url  = google_cloud_run_v2_service.gateway.uri
+    frontend_url = "https://${google_firebase_hosting_site.default.site_id}.web.app"
+    deployed_at  = timestamp()
+  }
+  depends_on = [
+    null_resource.docker_build,
+    null_resource.firebase_deploy
+  ]
+}
+
 output "env_variables_for_local_dev" {
   description = "Environment variables needed for local development"
   value = {

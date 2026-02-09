@@ -45,6 +45,12 @@ resource "google_project_service" "firestore_api" {
   disable_on_destroy = false
 }
 
+resource "google_project_service" "firebasehosting_api" {
+  provider           = google-beta
+  service            = "firebasehosting.googleapis.com"
+  disable_on_destroy = false
+}
+
 resource "google_project_service" "apikeys_api" {
   provider           = google-beta
   service            = "apikeys.googleapis.com"
@@ -120,6 +126,8 @@ resource "google_cloud_run_v2_service" "gateway" {
   deletion_protection = false
 
   template {
+    timeout = "3600s" # 60 minutes - maximum for Cloud Run, needed for long WebSocket calls
+
     containers {
       # This image path assumes you will push to this location tag.
       # Format: region-docker.pkg.dev/project_id/repo_name/image_name:tag
@@ -144,7 +152,7 @@ resource "google_cloud_run_v2_service" "gateway" {
 
       env {
         name  = "GOOGLE_CLOUD_LOCATION"
-        value = "global"
+        value = "northamerica-northeast1"
       }
     }
   }
@@ -240,6 +248,61 @@ resource "google_firebase_web_app" "default" {
   display_name = "Smart Chat Web"
 
   depends_on = [google_firebase_project.default]
+}
+
+# Firebase Hosting
+resource "google_firebase_hosting_site" "default" {
+  provider = google-beta
+  project  = var.project_id
+  site_id  = var.project_id
+  app_id   = google_firebase_web_app.default.app_id
+
+  depends_on = [
+    google_firebase_project.default,
+    google_project_service.firebasehosting_api
+  ]
+}
+
+# Note: The 'live' channel is automatically created by Firebase when the site is created.
+# No need to explicitly create it.
+
+# Build and deploy Flutter web app
+resource "null_resource" "flutter_build" {
+  triggers = {
+    always_run = "${timestamp()}"
+  }
+
+  provisioner "local-exec" {
+    command     = <<EOT
+BACKEND_HTTP_URL="${google_cloud_run_v2_service.gateway.uri}"
+BACKEND_WS_URL=$(echo "$BACKEND_HTTP_URL" | sed 's|https://|wss://|')
+flutter build web --release \
+  --dart-define=API_BASE_URL="$BACKEND_HTTP_URL/api" \
+  --dart-define=BACKEND_URL="$BACKEND_WS_URL/ws/call"
+    EOT
+    working_dir = ".."
+  }
+
+  depends_on = [
+    google_firebase_hosting_site.default,
+    google_cloud_run_v2_service.gateway
+  ]
+}
+
+resource "null_resource" "firebase_deploy" {
+  triggers = {
+    always_run = "${timestamp()}"
+  }
+
+  provisioner "local-exec" {
+    command     = "firebase deploy --only hosting --project ${var.project_id} --non-interactive"
+    working_dir = ".."
+  }
+
+  depends_on = [
+    null_resource.flutter_build,
+    google_firebase_hosting_site.default
+  ]
 }
 
 resource "google_apikeys_key" "firebase_key" {
